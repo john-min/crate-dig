@@ -1,0 +1,21 @@
+# --- core (always needed) ---
+numpy
+pandas
+scikit-learn
+
+# --- clustering quality (recommended; pip installs cleanly on most systems) ---
+umap-learn
+hdbscan
+
+# --- reading the live rekordbox 6/7 database ---
+# If key auto-extraction fails, run once:  python -m pyrekordbox download-key
+pyrekordbox
+
+# --- audio analysis backend (pick ONE) ---------------------------------------
+# Recommended: Essentia with TensorFlow models (rich mood/genre/danceability).
+#   pip install essentia-tensorflow
+# On Apple Silicon, essentia-tensorflow wheels can be fiddly. If it won't install,
+# either run the Docker recipe in the README, or use the librosa fallback below.
+#
+# Fallback (installs everywhere, no semantic tags):
+#   pip install librosa soundfile

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>djvibe · library map</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#161a23; --panel2:#1e2330; --line:#2a3040;
+    --ink:#e8ecf4; --mut:#9aa6bd; --accent:#5cc8ff; --hot:#ff5c8a; --seed:#ffd166;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;
+         align-items:baseline;gap:14px}
+  header h1{font-size:18px;margin:0;letter-spacing:.3px}
+  header .sub{color:var(--mut);font-size:12px}
+  .wrap{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 53px)}
+  .side{border-right:1px solid var(--line);padding:16px;overflow:auto;background:var(--panel)}
+  .main{position:relative}
+  #plot{width:100%;height:100%}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);
+     margin:18px 0 8px}
+  input,button,select{font:inherit}
+  input[type=text]{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);
+     background:var(--panel2);color:var(--ink)}
+  .btn{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);
+     background:var(--accent);color:#04222e;font-weight:600;cursor:pointer;margin-top:8px}
+  .btn.ghost{background:transparent;color:var(--mut)}
+  .btn:active{transform:translateY(1px)}
+  .seedlist{margin:8px 0;display:flex;flex-direction:column;gap:6px}
+  .seed{display:flex;justify-content:space-between;align-items:center;gap:8px;
+     background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--seed);
+     padding:6px 8px;border-radius:6px;font-size:13px}
+  .seed b{color:var(--seed);font-weight:600}
+  .seed .x{cursor:pointer;color:var(--mut)}
+  .row{display:flex;gap:8px;align-items:center}
+  .row label{color:var(--mut);font-size:12px;min-width:64px}
+  .results{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .hit{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+     padding:7px 9px;font-size:13px;cursor:pointer}
+  .hit:hover{border-color:var(--accent)}
+  .hit .meta{color:var(--mut);font-size:11px;margin-top:2px;display:flex;
+     justify-content:space-between}
+  .pill{display:inline-block;background:#2a3142;border-radius:20px;padding:1px 8px;
+     font-size:10px;color:var(--accent)}
+  .sim{color:var(--hot);font-variant-numeric:tabular-nums}
+  .legend-note{color:var(--mut);font-size:11px;margin-top:6px}
+  datalist{max-height:200px}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#2a3040;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>djvibe</h1>
+  <span class="sub">library map &middot; <span id="ntracks"></span> tracks &middot;
+  <span id="nclusters"></span> vibe clusters &middot; backend: <span id="backend"></span></span>
+</header>
+<div class="wrap">
+  <div class="side">
+    <h2>Seed search — "find tracks like these"</h2>
+    <input id="search" list="tracklist" placeholder="Type a title or artist, press Enter"/>
+    <datalist id="tracklist"></datalist>
+    <div class="seedlist" id="seeds"></div>
+    <div class="row"><label>Show top</label>
+      <input id="topn" type="range" min="5" max="100" value="25" style="flex:1"/>
+      <span id="topnval" style="width:34px;text-align:right">25</span>
+    </div>
+    <button class="btn" id="find">Find similar</button>
+    <button class="btn ghost" id="clear">Clear seeds &amp; reset</button>
+
+    <h2>Filter</h2>
+    <div class="row"><label>BPM</label>
+      <input id="bpmmin" type="text" value="" placeholder="min" style="width:70px"/>
+      <input id="bpmmax" type="text" value="" placeholder="max" style="width:70px"/>
+      <button class="btn ghost" id="applyfilter" style="width:auto;margin:0;padding:6px 10px">Apply</button>
+    </div>
+    <div class="legend-note">Click any point on the map to inspect it and add it as a seed.
+       Toggle clusters using the legend on the right.</div>
+
+    <h2 id="resultshdr">Results</h2>
+    <div class="results" id="results"></div>
+  </div>
+  <div class="main"><div id="plot"></div></div>
+</div>
+
+<script>
+/*__DATA__*/
+
+// ---- index + helpers -----------------------------------------------------
+const T = DATA.tracks, E = DATA.emb;
+const byId = {}; T.forEach((t,i)=>{t._i=i; byId[t.id]=t;});
+document.getElementById('ntracks').textContent = T.length;
+document.getElementById('nclusters').textContent = DATA.clusters.filter(c=>c.id!==-1).length;
+document.getElementById('backend').textContent = DATA.backend;
+
+// palette
+const PAL = ['#5cc8ff','#ff5c8a','#9b8cff','#5ce1a0','#ffd166','#ff924c','#4cc9f0',
+  '#f15bb5','#8ac926','#ff99c8','#b5179e','#48cae4','#fb8500','#83c5be','#e0aaff',
+  '#ffadad','#a0c4ff','#caffbf','#ffd6a5','#bdb2ff'];
+const colorOf = c => c===-1 ? '#5b6373' : PAL[((c%PAL.length)+PAL.length)%PAL.length];
+
+let filterMask = T.map(()=>true);
+let seeds = [];
+
+// ---- autocomplete --------------------------------------------------------
+const dl = document.getElementById('tracklist');
+dl.innerHTML = T.slice(0,4000).map(t=>`<option value="${esc(t.a)} — ${esc(t.t)}">`).join('');
+function esc(s){return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+document.getElementById('search').addEventListener('keydown', e=>{
+  if(e.key!=='Enter') return;
+  const v = e.target.value.trim().toLowerCase();
+  const hit = T.find(t=>(`${t.a} — ${t.t}`).toLowerCase()===v)
+           || T.find(t=>(`${t.a} ${t.t}`).toLowerCase().includes(v));
+  if(hit){ addSeed(hit.id); e.target.value=''; }
+});
+
+// ---- seeds ---------------------------------------------------------------
+function addSeed(id){ if(!seeds.includes(id)){ seeds.push(id); renderSeeds(); } }
+function renderSeeds(){
+  const el = document.getElementById('seeds');
+  el.innerHTML = seeds.map(id=>{const t=byId[id];
+    return `<div class="seed"><span><b>${esc(t.a)}</b> — ${esc(t.t)}</span>
+      <span class="x" data-id="${id}">✕</span></div>`;}).join('');
+  el.querySelectorAll('.x').forEach(x=>x.onclick=()=>{
+    seeds = seeds.filter(s=>s!==x.dataset.id); renderSeeds();});
+}
+
+// ---- similarity (cosine; embeddings are L2-normalized) -------------------
+function findSimilar(){
+  if(!seeds.length){ alert('Add at least one seed track first.'); return; }
+  const dim = E[0].length;
+  const c = new Float64Array(dim);
+  seeds.forEach(id=>{const v=E[byId[id]._i]; for(let k=0;k<dim;k++) c[k]+=v[k];});
+  let n=0; for(let k=0;k<dim;k++) n+=c[k]*c[k]; n=Math.sqrt(n)||1;
+  for(let k=0;k<dim;k++) c[k]/=n;
+  const seedSet = new Set(seeds);
+  const scored = [];
+  for(let i=0;i<T.length;i++){
+    if(!filterMask[i] || seedSet.has(T[i].id)) continue;
+    const v=E[i]; let d=0; for(let k=0;k<dim;k++) d+=c[k]*v[k];
+    scored.push([d,i]);
+  }
+  scored.sort((a,b)=>b[0]-a[0]);
+  const top = scored.slice(0, +document.getElementById('topn').value);
+  renderResults(top);
+  highlight(top.map(s=>s[1]));
+}
+function renderResults(top){
+  document.getElementById('resultshdr').textContent = `Results — ${top.length} most similar`;
+  document.getElementById('results').innerHTML = top.map(([d,i])=>{const t=T[i];
+    return `<div class="hit" data-id="${t.id}">
+      <div><b>${esc(t.a)}</b> — ${esc(t.t)}</div>
+      <div class="meta"><span>${t.bpm?Math.round(t.bpm)+' BPM':''} ${t.key?'· '+esc(t.key):''}
+        · <span class="pill">${esc(t.m)}</span></span>
+        <span class="sim">${(d*100).toFixed(0)}%</span></div></div>`;}).join('');
+  document.querySelectorAll('.hit').forEach(h=>h.onclick=()=>addSeed(h.dataset.id));
+}
+
+// ---- plot ----------------------------------------------------------------
+function baseTraces(){
+  const groups = {};
+  T.forEach((t,i)=>{ if(!filterMask[i]) return;
+    (groups[t.c]=groups[t.c]||[]).push(t); });
+  return DATA.clusters.map(cl=>{
+    const pts = groups[cl.id]||[];
+    return {
+      type:'scattergl', mode:'markers', name:`${cl.name} (${cl.count})`,
+      x:pts.map(p=>p.x), y:pts.map(p=>p.y),
+      customdata:pts.map(p=>p.id),
+      text:pts.map(p=>`<b>${esc(p.a)}</b> — ${esc(p.t)}<br>${p.bpm?Math.round(p.bpm)+' BPM ':''}${p.key||''}<br>${esc(p.cn)}<br><i>${esc(p.m)}</i>`),
+      hovertemplate:'%{text}<extra></extra>',
+      marker:{size:6, color:colorOf(cl.id), opacity:.78,
+              line:{width:0}},
+    };
+  });
+}
+function layout(){
+  return {paper_bgcolor:'#0d0f14', plot_bgcolor:'#0d0f14',
+    font:{color:'#9aa6bd'}, margin:{l:10,r:10,t:10,b:10},
+    xaxis:{visible:false}, yaxis:{visible:false},
+    legend:{font:{size:11}, bgcolor:'rgba(22,26,35,.6)'},
+    hoverlabel:{bgcolor:'#1e2330', bordercolor:'#2a3040', font:{color:'#e8ecf4'}}};
+}
+function draw(){ Plotly.react('plot', baseTraces(), layout(),
+  {responsive:true, displaylogo:false}); attachClick(); }
+
+function highlight(idxs){
+  draw();
+  const hl = {type:'scattergl', mode:'markers', name:'similar', showlegend:false,
+    x:idxs.map(i=>T[i].x), y:idxs.map(i=>T[i].y),
+    customdata:idxs.map(i=>T[i].id),
+    text:idxs.map(i=>`<b>${esc(T[i].a)}</b> — ${esc(T[i].t)}`),
+    hovertemplate:'%{text}<extra></extra>',
+    marker:{size:11, color:'#ff5c8a', line:{width:1.5,color:'#fff'}, opacity:.95}};
+  const sd = {type:'scattergl', mode:'markers', name:'seeds', showlegend:false,
+    x:seeds.map(id=>byId[id].x), y:seeds.map(id=>byId[id].y),
+    text:seeds.map(id=>`SEED: ${esc(byId[id].a)} — ${esc(byId[id].t)}`),
+    hovertemplate:'%{text}<extra></extra>',
+    marker:{size:15, color:'#ffd166', symbol:'star', line:{width:1.5,color:'#fff'}}};
+  Plotly.addTraces('plot', [hl, sd]); attachClick();
+}
+function attachClick(){
+  document.getElementById('plot').on('plotly_click', ev=>{
+    const id = ev.points[0].customdata; if(id) addSeed(id);
+  });
+}
+
+// ---- filters / controls --------------------------------------------------
+document.getElementById('topn').oninput = e =>
+  document.getElementById('topnval').textContent = e.target.value;
+document.getElementById('find').onclick = findSimilar;
+document.getElementById('applyfilter').onclick = ()=>{
+  const mn=parseFloat(document.getElementById('bpmmin').value);
+  const mx=parseFloat(document.getElementById('bpmmax').value);
+  filterMask = T.map(t=>{
+    if(!isNaN(mn) && (!t.bpm||t.bpm<mn)) return false;
+    if(!isNaN(mx) && (!t.bpm||t.bpm>mx)) return false;
+    return true;});
+  draw();
+};
+document.getElementById('clear').onclick = ()=>{
+  seeds=[]; renderSeeds(); filterMask=T.map(()=>true);
+  document.getElementById('bpmmin').value=''; document.getElementById('bpmmax').value='';
+  document.getElementById('results').innerHTML='';
+  document.getElementById('resultshdr').textContent='Results';
+  draw();
+};
+
+draw();
+</script>
+</body>
+</html>
