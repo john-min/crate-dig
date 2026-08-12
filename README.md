@@ -1,247 +1,294 @@
-# djvibe — an electronic-musicology engine for your rekordbox library
+# djvibe
 
-Analyze ~3000 tracks with audio ML, discover the natural *vibe* clusters in your
-collection, and explore them in an interactive map where you drop in a few seed
-songs and instantly surface the tracks that flow with them. Built for house/techno
-DJs who want their library to suggest sets — beach-club afternoons, golden-hour
-sunsets, peak-time, afterhours — instead of scrolling 3000 rows.
+An electronic-musicology toolkit for DJs. It analyzes the audio in your rekordbox
+library with a music-audio neural net, turns every track into a "vibe" fingerprint
+plus human-readable tags, and gives you an interactive dashboard to explore your
+collection by feel — filter by vibe + BPM + genre/label, drop in seed tracks to
+find what flows next, audition with a built-in player, and thumbs-up/down to teach
+it your taste.
 
-It runs **locally on your machine** because that's where your audio files and
-rekordbox database live. Nothing is uploaded anywhere.
-
----
-
-## What it does, end to end
-
-1. **extract** — reads your rekordbox collection (BPM, key, genre, file paths).
-2. **analyze** — runs each track through an audio neural net to produce a 1280-d
-   *vibe vector* plus human-readable tags (mood/theme, danceability, genre).
-3. **cluster** — projects those vectors with UMAP and finds natural groupings with
-   HDBSCAN, then auto-names each cluster and tags every track with a suggested
-   DJ moment.
-4. **dashboard** — builds a single self-contained `dashboard.html`: a 2-D map of
-   your whole library colored by cluster, with a *seed-song similarity search*.
-5. **writeback** *(optional)* — exports those clusters back to rekordbox as
-   playlists via a non-destructive XML import.
+Everything runs **locally** on your machine. Nothing is uploaded anywhere.
 
 ---
 
-## Quickstart
+## Table of contents
+1. [What it does](#what-it-does)
+2. [How it works (the pipeline)](#how-it-works-the-pipeline)
+3. [The three analysis engines](#the-three-analysis-engines)
+4. [Directory structure](#directory-structure)
+5. [The data workspace](#the-data-workspace)
+6. [Setup](#setup)
+7. [Usage, start to finish](#usage-start-to-finish)
+8. [The dashboard, explained](#the-dashboard-explained)
+9. [Updating with new music](#updating-with-new-music)
+10. [Tuning knobs](#tuning-knobs)
+11. [Honest limitations](#honest-limitations)
 
-```bash
-# 1. install (Python 3.9–3.11 recommended)
-pip install -r requirements.txt
-pip install essentia-tensorflow      # the recommended audio backend (see notes)
+---
 
-# 2. read your rekordbox collection
-python -m djvibe extract             # reads the live rekordbox 6/7 database
-#   ...or, if that can't find/unlock the DB:
-python -m djvibe extract --xml /path/to/rekordbox_export.xml
+## What it does
 
-# 3. analyze the audio (the long step — see timing below; it's resumable)
-python -m djvibe analyze --backend essentia
+Given a rekordbox library of a few thousand tracks, djvibe:
 
-# 4. discover clusters and build the dashboard
-python -m djvibe cluster
-python -m djvibe dashboard
-open djvibe_data/dashboard.html      # double-click it; opens in your browser
+- **reads** your collection (titles, artists, BPM, key, genre, label, file paths),
+- **listens** to each track and encodes it as a 512-dimension "vibe vector,"
+- **tags** each track with descriptive vibe words (hypnotic, driving, warm, dark,
+  vocal, …), calibrated to your own library,
+- **serves an interactive dashboard** where you filter by vibe/attributes, seed-
+  search for similar tracks, play audio, and give feedback that re-ranks results.
+
+The purpose is set-building: quickly assemble a pool of tracks that share a feel
+and flow together for a specific moment.
+
+---
+
+## How it works (the pipeline)
+
+```
+rekordbox library
+      │  1. extract
+      ▼
+ tracks.csv  ──────────────────────────────┐
+      │  2. analyze (audio → neural net)     │ (metadata)
+      ▼                                      │
+ embeddings.npy  (512-d vibe vector/track)   │
+      │  3. re-tag (cosine to vibe words,    │
+      │            calibrated per library)   │
+      ▼                                      ▼
+ features.csv  (vibe:: tag scores)  +  moments (peak-time/sunset/…)
+      │  4. build + serve
+      ▼
+ dashboard.html  ──►  browser (filter · seed-search · play · 👍/👎)
 ```
 
-Or run analyze → cluster → dashboard in one go after extracting: `python -m djvibe all`.
+1. **Extract** — read the rekordbox database (or an XML export) into a normalized
+   `tracks.csv`.
+2. **Analyze** — decode each audio file, take a representative *core excerpt*
+   (skip intro/outro), and run it through the audio encoder to get a unit-length
+   512-d embedding. Cached track-by-track so it's resumable.
+3. **Re-tag** — score each track against a vocabulary of vibe words via cosine
+   similarity, then **calibrate** those scores across your library (z-score) so no
+   single word dominates. Each track's top-5 calibrated words become its tags.
+4. **Explore** — a self-contained HTML dashboard, served by a tiny local web
+   server that also streams your audio and records feedback.
 
-All intermediate files land in `./djvibe_data/` (override with `--workdir`).
-
-### Chord progressions (optional extra pass)
-
-Add a beat-synced **chord progression** and estimated key to every track card. This
-runs as a *separate, non-destructive pass* — it does not touch your embeddings or
-re-run the main analysis, and it's resumable (Ctrl-C safe):
-
-```bash
-pip install librosa soundfile        # if you're not already on the librosa backend
-python3 extract_chords.py            # writes djvibe_data/chords.csv (resumable)
-python3 extract_chords.py --rebuild  # ...and rebuild dashboard.html when done
-```
-
-The dashboard picks up `chords.csv` automatically: each track row shows its
-progression (e.g. `A minor: Am F C G`). Detection uses librosa — a CQT chromagram
-matched against 24 major/minor triad templates, beat-synchronized. It's strongest
-on clear, beat-driven harmonic material and noisier on dense or atonal tracks.
-
-> **Try the dashboard right now without any audio:** a working demo built from
-> 600 synthetic tracks ships in `demo_data/dashboard.html`. Open it to learn the
-> UX before you run the real thing.
+The math for step 3 is documented in full in **`CLAP_TAXONOMY.md`**. Short version:
+`score = cosine(audio_vector, word_vector)`, then `calibrated = (score − μ_word) /
+σ_word` across your library. Similarity search (step 4) ignores tags entirely and
+ranks directly on the embeddings (`query · track`), refined by your 👍/👎 (Rocchio
+relevance feedback).
 
 ---
 
-## The dashboard — how you'll actually use it
+## The three analysis engines
 
-Open `dashboard.html` and you get a map where every dot is a track and color = cluster.
+`analyze` supports three backends (`--backend`). They differ only in *how a track
+becomes a vector + tags*; everything downstream is identical.
 
-- **Seed search.** Type a title/artist in the box and press Enter (or click any dot)
-  to add it as a *seed*. Add a few seeds that share the feeling you want, set "Show
-  top N", and hit **Find similar**. It computes cosine similarity over the audio
-  embeddings and ranks the closest tracks in your library — the heart of building a
-  set that flows. Matches are highlighted on the map (pink) and listed with a %
-  similarity score; seeds show as gold stars.
-- **Clusters.** The legend lists each discovered cluster with its auto-name
-  (e.g. *"deep / hypnotic / soulful · 119 BPM"*). Click a legend entry to toggle it.
-- **Filter by BPM** to keep similarity results inside a mixable tempo window.
-- Every track also carries a **suggested moment** (Sunrise, Daytime beach club,
-  Sunset, Peak time, Deep/afterhours, Main floor) shown on hover and in results.
-
-Workflow for a set: seed with 2–3 tracks you know open well for "sunset", find the
-50 most similar, filter to 120–124 BPM, and you've got a candidate pool that hangs
-together sonically — then sequence by energy.
-
----
-
-## The musicology under the hood
-
-**Why a learned embedding, not just BPM + key?** BPM and Camelot key tell you what
-*mixes*, not what *belongs together*. Two 124-BPM tracks can feel like different
-planets. The embedding captures timbre, texture, rhythm feel, production
-character and mood — the things you actually mean by "vibe" — in one vector, so
-"distance in vector space" ≈ "sounds/feels similar."
-
-**The backbone — Discogs-EffNet (Essentia).** Each track is decoded to mono 16 kHz
-and passed through Essentia's `discogs-effnet` model; we mean-pool its penultimate
-layer to a single **1280-dimension embedding**. This model was trained on a huge
-Discogs catalog, so its representation is unusually good at electronic-music
-distinctions (deep vs. tech vs. melodic house, etc.).
-
-**Interpretable heads — so clusters have names.** On top of the same embedding we
-run lightweight classifier heads:
-- **mood/theme** (MTG-Jamendo, 56 tags: groovy, uplifting, dark, dreamy, hypnotic…),
-- **danceability**, **approachability**, **engagement**,
-- **genre** (Discogs-400).
-These don't drive the clustering; they *describe* it, so each cluster gets a label
-like *"groovy / uplifting · 122 BPM"* instead of *"cluster 7."*
-
-**Clustering — UMAP → HDBSCAN.** Clustering raw 1280-d vectors is unreliable
-(everything is far from everything in high dimensions). So we standardize, use
-**UMAP** to compress to ~10 dimensions while preserving neighborhood structure,
-then run **HDBSCAN**, which finds clusters of *varying density* and is honest about
-outliers (your true one-offs land in a "−1 / one-offs" group instead of being
-forced somewhere). A separate 2-D UMAP gives the dashboard map. You chose
-*data-driven* clusters: the algorithm decides how many groups exist, not a preset.
-
-**Suggested moments** are a transparent heuristic layered on top (tempo + energy +
-brightness/positivity percentiles → Sunrise/Beach/Sunset/Peak/Afterhours). They're
-*starting suggestions* for set placement, not ground truth — tune the thresholds in
-`djvibe/cluster.py:_suggested_moment` to taste.
-
----
-
-## Choosing an audio backend
-
-| Backend | Install | Gives you | Use when |
+| Engine | Install | Gives you | Notes |
 |---|---|---|---|
-| **essentia** *(recommended)* | `pip install essentia-tensorflow` | Discogs-EffNet embedding **+** mood/genre/danceability tags → named clusters | You can install it (see Apple-Silicon note) |
-| **librosa** *(fallback)* | `pip install librosa soundfile` | A compact MFCC/chroma/spectral/tempo vector. Similarity + clustering still work; clusters are named by tempo/energy/brightness instead of mood | Essentia won't install, or you want a fast first pass |
+| **clap** (recommended) | PyTorch + transformers (native, GPU) | 512-d embedding + open-vocabulary vibe tags | best results; tags are editable text prompts |
+| **essentia** | Docker (Linux) | Discogs genre + mood tags | fiddly on Apple Silicon; use Docker |
+| **librosa** | pip, installs everywhere | MFCC/spectral vector, tempo/energy names | fastest to set up; no semantic tags |
 
-`--backend auto` picks Essentia if importable, else librosa.
-
-**Apple Silicon (M-series) note.** `essentia-tensorflow` wheels can be fiddly on
-arm64. Options, in order of preference:
-1. Use a Python 3.10 environment (conda or pyenv) and `pip install essentia-tensorflow`.
-2. Run the analyze step in Docker:
-   ```bash
-   docker run --rm -v "$PWD":/work -w /work mtgupf/essentia:latest \
-     python3 -m djvibe analyze --backend essentia
-   ```
-   (Model files download into `djvibe_data/models/` and are reused.)
-3. Fall back to `--backend librosa` — the clustering and seed-search dashboard work
-   identically; you only lose the mood/genre cluster *names*.
-
-The Essentia model weights (~hundreds of MB total) download automatically on first
-run into `djvibe_data/models/`.
+Each engine writes to its own workspace folder (e.g. `djvibe_clap/`), so you can
+run several and compare them in `build_multi.py`.
 
 ---
 
-## Reading your rekordbox library
+## Directory structure
 
-**Live database (default).** rekordbox 6 and 7 store everything in an encrypted
-SQLite database (`master.db`, SQLCipher). `pyrekordbox` extracts the key
-automatically on most installs. If extraction fails (Pioneer occasionally changes
-where the key lives), run once:
+```
+djvibe/                         ← project root (this repo)
+├── README.md                   this file
+├── CLAP_TAXONOMY.md            the math behind the vibe tags
+├── CLAP_GUIDE.md               how to set up + run the CLAP engine
+├── ESSENTIA_DOCKER_GUIDE.md    how to run the Essentia engine in Docker
+├── RUN_FROM_SCRATCH.md         beginner, copy-paste setup walkthrough
+├── requirements.txt            core Python packages
+│
+├── player_server.py            ★ builds the dashboard, serves it, streams audio,
+│                                 saves 👍/👎 feedback  (the thing you run daily)
+├── dashboard_studio.py         ★ builds the interactive discovery dashboard HTML
+├── build_multi.py              alt dashboard: toggle between engines + a fused view
+├── retag_clap.py               recompute CLAP vibe tags from cached embeddings
+├── update_library.py           refresh flow after adding/removing tracks
+├── tag_report.py               export a per-track tag report + tag distribution
+├── retune_clusters.py          (legacy) re-cluster helper
+│
+├── djvibe/                     the engine (a Python package)
+│   ├── __main__.py / cli.py    the `python -m djvibe <command>` interface
+│   ├── io.py                   workspace paths + load/save helpers
+│   ├── library.py              read rekordbox (live DB via pyrekordbox, or XML)
+│   ├── features.py             audio backends: librosa / essentia / CLAP,
+│   │                             the vibe vocabulary, core-excerpt logic
+│   ├── models.py               downloads Essentia model weights
+│   ├── analyze.py              resumable per-track analysis runner
+│   ├── cluster.py              UMAP projection, calibration helpers,
+│   │                             suggested-moment heuristic, cluster naming
+│   ├── dashboard.py            (legacy) basic dashboard builder
+│   └── writeback.py            export tag/cluster playlists back to rekordbox XML
+│
+└── tests/
+    └── make_synthetic.py       generate fake data to test the dashboard offline
+```
+
+The **★** files are the two you actually run day to day. The `djvibe/` package is
+the machinery they call.
+
+---
+
+## The data workspace
+
+Analysis output lives in a **workspace folder** (default `./djvibe_data`; the CLAP
+setup uses `./djvibe_clap`). It is *not* committed to git — it holds your personal
+library data. Contents:
+
+```
+djvibe_clap/
+├── tracks.csv            your collection: id, title, artist, bpm, key, genre, label, path
+├── audio_cache.jsonl     per-track analysis cache (resumable; one JSON per line)
+├── embeddings.npy        [N, 512] the vibe vectors        embeddings_ids.json (row order)
+├── features.csv          per-track vibe:: tag scores + energy/warmth proxies
+├── reduced_emb.npy       (optional) small embedding used by older builders
+├── dashboard.html        the built dashboard (regenerated on each run)
+└── feedback.jsonl        your 👍/👎 votes, with seed context
+```
+
+You point tools at a workspace with `--workdir djvibe_clap` (CLI) or
+`DJVIBE_WORKDIR=djvibe_clap` (the server).
+
+---
+
+## Setup
+
+macOS on Apple Silicon. There are **two Python environments** because PyTorch
+(CLAP) needs Python 3.12, while everything else runs on your system Python:
+
+- **System `python3`** — used for `extract`, building/serving the dashboard, and
+  the clustering/UMAP math. Needs: `numpy pandas scikit-learn pyrekordbox librosa
+  soundfile umap-learn hdbscan`.
+- **`clap_env` (Python 3.12 venv)** — used only for CLAP `analyze` + `retag`.
+  Needs: `torch transformers librosa soundfile numpy pandas`.
+
+Full beginner instructions are in `RUN_FROM_SCRATCH.md` (system tools) and
+`CLAP_GUIDE.md` (the CLAP environment). One-time gist:
 
 ```bash
-python -m pyrekordbox download-key
+# system python
+python3 -m pip install numpy pandas scikit-learn pyrekordbox librosa soundfile umap-learn hdbscan
+
+# CLAP env (Python 3.12)
+python3.12 -m venv clap_env
+source clap_env/bin/activate
+pip install torch transformers librosa soundfile numpy pandas
+deactivate
 ```
 
-then `python -m djvibe extract` again.
+---
 
-**XML fallback (always works).** In rekordbox: Preferences ▸ Advanced ▸ Database ▸
-**rekordbox xml**, set a path, and export your collection. Then:
+## Usage, start to finish
 
+Quit rekordbox before reading its database. Run from the project folder.
+
+**Step 1 — read your library** (system python):
 ```bash
-python -m djvibe extract --xml /path/to/collection.xml
+python3 -m djvibe --workdir djvibe_clap extract
 ```
+If the encrypted DB won't unlock: `python3 -m pyrekordbox download-key`, or export
+a rekordbox XML and use `extract --xml path/to/export.xml`.
 
-This needs no key and is version-proof. Tracks with no resolvable file path are
-skipped (you'll see a count).
-
-**Quit rekordbox before running** — it locks the database.
-
----
-
-## Sending clusters back into rekordbox (optional)
-
+**Step 2 — analyze the audio with CLAP** (in `clap_env`; resumable, ~30–60 min):
 ```bash
-python -m djvibe writeback        # writes djvibe_data/djvibe_rekordbox.xml
+source clap_env/bin/activate
+python -m djvibe --workdir djvibe_clap analyze --backend clap
 ```
 
-This is **non-destructive** — it never touches `master.db`. It builds a rekordbox
-XML containing one playlist per cluster and one per suggested moment. Import via
-Preferences ▸ Advanced ▸ Database ▸ rekordbox xml; the playlists appear under the
-"rekordbox xml" tree, ready to drag into your collection.
-
----
-
-## Performance for ~3000 tracks
-
-The analyze step is the only slow one and is **fully resumable** — every track is
-checkpointed to `audio_cache.jsonl`, so you can stop with Ctrl-C and re-run to
-continue. Rough order of magnitude on a laptop CPU: Essentia ≈ 1–3 s/track
-(≈ 1–2.5 hours for 3000), librosa ≈ 0.5–1 s/track. cluster + dashboard take
-seconds. The dashboard for 3000 tracks is a single ~2–4 MB HTML file.
-
----
-
-## Files produced (in `djvibe_data/`)
-
-```
-tracks.csv          your collection, normalized
-audio_cache.jsonl   per-track analysis cache (resumable)
-embeddings.npy      [N, 1280] vibe vectors      embeddings_ids.json (row order)
-features.csv        interpretable per-track tags
-clusters.csv        cluster, cluster_name, umap_x/y, suggested_moment
-reduced_emb.npy     [N, 64] L2-normalized, powers the dashboard's similarity search
-dashboard.html      ← open this
-djvibe_rekordbox.xml (only if you run writeback)
+**Step 3 — tag from the embeddings** (still in `clap_env`; seconds — no re-analysis):
+```bash
+python retag_clap.py --workdir djvibe_clap --mode zscore
+deactivate
 ```
 
----
+**Step 4 — open the dashboard** (system python; this is the daily command):
+```bash
+DJVIBE_WORKDIR=djvibe_clap python3 player_server.py
+```
+Your browser opens automatically. Press Control+C in the terminal to stop.
 
-## Troubleshooting
-
-- **"pyrekordbox could not read the key"** → `python -m pyrekordbox download-key`, or
-  use `--xml`.
-- **Essentia won't install** → use Docker or `--backend librosa` (see above).
-- **A few tracks error during analyze** → they're logged in `audio_cache.jsonl`
-  with `ok:false` and skipped; common causes are missing/moved files or DRM'd
-  formats. Fix paths in rekordbox and re-run `analyze` to fill them in.
-- **Clusters look too coarse/fine** → tune `--min-cluster-size` (smaller = more,
-  tighter clusters).
+After the first run, day-to-day is just **Step 4**. Steps 1–3 only come back when
+you add music (see [Updating](#updating-with-new-music)).
 
 ---
 
-## Roadmap ideas
+## The dashboard, explained
 
-- Harmonic-mix suggestions (Camelot-wheel-aware "next track" within a cluster).
-- Energy-curve set sequencing (auto-order a selection into an arc).
-- Re-run only newly-added tracks (incremental analyze) on a schedule.
+A two-pane layout: controls on the left, a 2-D map of your library on top-right,
+and a track list beneath it.
 
-Built as a starting point — the feature definitions, cluster naming, and moment
-heuristics all live in plain Python and are meant to be tuned to your ear.
+- **Vibe tags** (left, grouped into Energy / Mood / Texture / Instrumentation) —
+  click chips to keep only tracks with those vibes. "match ALL" toggles between
+  needing every selected tag vs. any of them.
+- **Filters** — BPM range, Artist (contains), Genre, Label. Combined with the tags
+  they define your **working pool**; the map dims everything outside it.
+- **Seed search** — add seed tracks (type a name, or click a dot on the map), then
+  **Find similar within pool** ranks the closest-sounding tracks *inside* your
+  filtered pool.
+- **👍 / 👎 on results** — 👍 = more like this, 👎 = less. The list re-ranks live
+  (it nudges the search toward your thumbs-up and away from thumbs-down), and every
+  vote is saved to `feedback.jsonl`.
+- **Player** — every row and the map have play controls; single-click a dot to seed
+  it, double-click to audition it. Audio streams from your local files.
+- **The map** — each dot is a track, positioned so similar-sounding tracks sit near
+  each other, colored by its top vibe.
+
+The suggested "moment" per track (peak time / sunset / beach club / …) is a
+heuristic from BPM + calibrated energy/warmth percentiles; treat it as a hint.
+
+---
+
+## Updating with new music
+
+Quit rekordbox, then (this spans both environments):
+```bash
+rm "djvibe_clap/tracks.csv"
+python3 -m djvibe --workdir djvibe_clap extract          # re-read library
+source clap_env/bin/activate
+python -m djvibe --workdir djvibe_clap analyze --backend clap   # only new tracks
+python retag_clap.py --workdir djvibe_clap --mode zscore
+deactivate
+DJVIBE_WORKDIR=djvibe_clap python3 player_server.py
+```
+`analyze` is incremental (it skips everything already cached), so adding a handful
+of tracks takes seconds.
+
+---
+
+## Tuning knobs
+
+- **The vibe vocabulary** — `VIBES = [...]` in `djvibe/features.py`. Add/remove
+  words freely (CLAP is open-vocabulary), then re-run `retag_clap.py`. Keep it to
+  words CLAP reliably hears in *your* music; a noisy tag is worse than none.
+- **Precise prompts** — `PROMPT_TEXT` in `features.py` lets a tag use a longer,
+  sharper prompt phrase while keeping a short chip label.
+- **Calibration mode** — `retag_clap.py --mode {zscore,centered,mixed,raw}`.
+  `zscore` (library-relative) is the recommended default and avoids "attractor"
+  tags that over-spread.
+- **Moment logic** — `ENERGY` / `VALENCE` sets in `features.py` (which tags feed
+  energy vs. warmth) and `_suggested_moment` in `djvibe/cluster.py` (BPM cutoffs +
+  thresholds + the moment names).
+
+---
+
+## Honest limitations
+
+- The audio model's read of "vibe" is a good but imperfect proxy for *your* ear.
+- Tags are **library-relative** — they mean "…for your collection," not absolute.
+- Narrow concepts (e.g. "acid") the model can't isolate reliably; curate the vocab.
+- The "moment" labels are the softest layer — a rule-of-thumb, not ground truth.
+- Grouping/similarity work on sonic feel, not mixability — BPM/key are shown but
+  don't drive similarity; sequence a set with your own ears.
+
+---
+
+*Built locally, for one crate at a time.*

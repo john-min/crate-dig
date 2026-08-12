@@ -1,6 +1,4 @@
 clap_env/
-djvibe_data/
-djvibe_clap/
 __pycache__/
 *.pyc
 .DS_Store
