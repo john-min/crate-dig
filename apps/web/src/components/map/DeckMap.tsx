@@ -41,13 +41,8 @@ export default function DeckMap({
 }: MapCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [viewState, setViewState] = useState<OrthographicViewState>({
-    target: [0, 0, 0],
-    zoom: 0,
-    minZoom: -3,
-    maxZoom: 8,
-  });
-  const fittedFor = useRef<string | null>(null);
+  const [userView, setUserView] = useState<OrthographicViewState | null>(null);
+  const [viewKey, setViewKey] = useState<string | null>(null);
 
   const usingFixture = !tracks?.length;
   const plotTracks = useMemo(() => {
@@ -101,32 +96,30 @@ export default function DeckMap({
 
   const legend = useMemo(() => buildLegend(visible, colorBy), [visible, colorBy]);
 
+  const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}`;
+  const fitted = useMemo(
+    () => fitTracksToView(plotTracks, size.width, size.height),
+    [plotTracks, size.height, size.width],
+  );
+  const viewState: OrthographicViewState =
+    userView && viewKey === dataKey
+      ? userView
+      : { target: fitted.target, zoom: fitted.zoom, minZoom: -3, maxZoom: 8 };
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setSize({ width, height });
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const applyFit = useCallback(
-    (force = false) => {
-      const key = `${plotTracks.length}:${size.width}x${size.height}`;
-      if (!force && fittedFor.current === key) return;
-      if (!plotTracks.length || size.width < 8) return;
-      fittedFor.current = key;
-      const fitted = fitTracksToView(plotTracks, size.width, size.height);
-      setViewState((prev) => ({ ...prev, ...fitted }));
-    },
-    [plotTracks, size.height, size.width],
-  );
-
-  useEffect(() => {
-    applyFit(false);
-  }, [applyFit]);
+  const applyFit = useCallback(() => {
+    setUserView({ target: fitted.target, zoom: fitted.zoom, minZoom: -3, maxZoom: 8 });
+    setViewKey(dataKey);
+  }, [dataKey, fitted.target, fitted.zoom]);
 
   const select = useCallback(
     (id: string | null) => {
@@ -246,9 +239,10 @@ export default function DeckMap({
       <DeckGL
         views={VIEW}
         viewState={viewState}
-        onViewStateChange={({ viewState: next }) =>
-          setViewState(next as OrthographicViewState)
-        }
+        onViewStateChange={({ viewState: next }) => {
+          setUserView(next as OrthographicViewState);
+          setViewKey(dataKey);
+        }}
         layers={layers}
         onHover={onHover}
         onClick={onClick}
@@ -271,7 +265,7 @@ export default function DeckMap({
           playingId={playingId}
           seedIds={seedIds}
           hover={hover}
-          onFit={() => applyFit(true)}
+          onFit={applyFit}
           onClearSelection={() => select(null)}
           onPlay={(track) => setInternalPlaying(track.id)}
           onToggleSeed={(track) => {
