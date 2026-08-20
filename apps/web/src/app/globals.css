@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  --ink: oklch(0.175 0.014 72);
+  --ink-raised: oklch(0.215 0.014 72);
+  --ink-hover: oklch(0.255 0.016 72);
+  --paper: oklch(0.93 0.016 82);
+  --paper-dim: oklch(0.74 0.02 75);
+  --muted: oklch(0.62 0.018 72);
+  --amber: oklch(0.79 0.11 78);
+  --amber-dim: oklch(0.58 0.09 78);
+  --line: oklch(0.93 0.016 82 / 0.09);
+  --danger: oklch(0.7 0.14 25);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-raised: var(--ink-raised);
+  --color-ink-hover: var(--ink-hover);
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-muted: var(--muted);
+  --color-amber: var(--amber);
+  --color-amber-dim: var(--amber-dim);
+  --color-line: var(--line);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+}
+
+html,
+body {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+::selection {
+  background: oklch(0.79 0.11 78 / 0.35);
+  color: var(--paper);
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(6px, -10px, 0);
+  }
+}
+
+@keyframes scan {
+  from {
+    transform: translateX(-12%);
+  }
+  to {
+    transform: translateX(112%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
