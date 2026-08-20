@@ -1,0 +1,51 @@
+# generated analysis workspaces
+djvibe_data/
+djvibe_clap/
+**/djvibe_data/
+**/djvibe_clap/
+
+# generated analysis artifacts
+*.npy
+*.npz
+audio_cache.jsonl
+feedback.jsonl
+dashboard.html
+features.csv
+clusters.csv
+embeddings_ids.json
+reduced_emb.npy
+
+# model/download/cache artifacts
+models/
+.cache/
+
+# Python/local env
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# secrets and local env
+.env
+.env.*
+!.env.example
+*.swp
+*.swo
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Supabase local runtime
+supabase/.temp/
+supabase/.branches/
