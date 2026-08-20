@@ -17,12 +17,22 @@ This repository is documentation-led on `main`. Implementation lives on feature 
 ## Layout
 
 ```txt
-apps/web/          Next.js app (later)
+apps/web/          Next.js app (Vercel root directory)
 packages/engine/   Python analysis engine (`cratedig_engine`)
-supabase/          migrations (later)
+supabase/          migrations
 ```
 
 The engine package name is `cratedig_engine` under `packages/engine`. Do not introduce `cratedig_analysis` or `packages/analysis`.
+
+## Web app
+
+```bash
+cd apps/web
+pnpm install   # npm install also works; see apps/web/README.md
+pnpm dev
+```
+
+Copy `apps/web/.env.example` to `apps/web/.env.local`. Use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, not `ANON_KEY`.
 
 ## Engine (local)
 
@@ -35,6 +45,15 @@ pytest
 ```
 
 Fast analysis uses librosa and does not require CLAP or PyTorch. Deep analysis (CLAP) and Essentia are optional extras.
+
+Cloud Run Job MVP:
+
+```bash
+pip install -e ".[job]"
+cratedig-engine analyze-run --analysis-run-id <uuid>
+```
+
+See `packages/engine/README.md` for env vars, Docker, and waveform/preview stubs.
 
 ## What does not belong in Git
 
