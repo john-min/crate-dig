@@ -34,9 +34,6 @@ cluster-quality = [
   "umap-learn>=0.5",
   "hdbscan>=0.8",
 ]
-rekordbox-db = [
-  "pyrekordbox>=6.0",
-]
 job = [
   "cratedig-engine[fast]",
   "supabase>=2.9",

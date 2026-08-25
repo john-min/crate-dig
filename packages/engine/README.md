@@ -4,21 +4,27 @@ Python analysis engine for Crate Dig. Fast analysis (librosa) runs without CLAP 
 
 Implementation requirements:
 
-- [`CRATE_DIG_ENGINE_PRD.md`](../../CRATE_DIG_ENGINE_PRD.md)
+- [`sonic_analysis_prd.md`](../../sonic_analysis_prd.md)
+- [`IMPLEMENTATION_PLAN.md`](../../IMPLEMENTATION_PLAN.md)
 - [`sonic_analysis_engine.md`](../../sonic_analysis_engine.md)
 
 ## Current and target architecture
 
-The current engine is an MVP:
+The Engine v2 extractor foundation now runs alongside the original MVP path:
 
-- one `AudioBackend` runs per analysis
-- each backend decodes independently
-- one embedding and a JSON feature dictionary are emitted
-- the Cloud Run job analyzes and clusters in one process
-- waveforms/previews are stubs
-- source separation is not implemented yet
+- `DecodedAudio` decodes once and memoizes deterministic sample-rate/channel views
+- versioned window plans retain queryable window evidence after pooling
+- independent extractors emit typed embeddings, scalars, tags, warnings, and provenance
+- extractor cache identity is content-addressed and excludes logical `track_id`
+- `LibrosaExtractor` keeps the 65-dimensional legacy baseline while adding physical evidence from the shared audio substrate
+- `extract_manifest_file` resolves exact extractor versions and per-extractor window plans, then shares one source decode across native extractors
+- `LegacyBackendExtractor` keeps existing backends usable during migration, declares their actual internal window plan, and reports that they reopen audio
 
-`AudioBackend` remains a compatibility surface while the engine migrates to shared `DecodedAudio`, versioned windows, independent extractors, per-extractor caches, explicit embedding roles, a frozen map projection, and mandatory asynchronous four-stem processing for completed analysis.
+The existing `AudioBackend` and Cloud Run job remain compatibility paths. The job still analyzes and clusters in one process, and CLAP/Essentia still decode independently when used through the legacy adapter. The JSONL extractor cache is a process-local migration aid, not the durable/concurrent job store. Waveforms/previews are stubs, the map projection is not frozen, and source separation is not implemented yet.
+
+Librosa tempo estimates include a tempogram-derived confidence score. Consumers must retain and apply that confidence; a product-facing sufficiency threshold will be frozen during the evaluation phase rather than guessed in the extractor.
+
+The next milestone moves extractor records into durable SQLite analysis runs with atomic stage claims and a separate local worker. Native model extractors, frozen projection, and mandatory asynchronous four-stem processing follow through separately versioned manifests.
 
 The initial separator target is HT-Demucs `htdemucs_ft`. It belongs in a dedicated local/cloud worker environment; it must not be added to synchronous API handlers or make import/playback wait.
 

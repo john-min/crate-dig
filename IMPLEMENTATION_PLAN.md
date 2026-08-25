@@ -262,6 +262,21 @@ Preserve:
 - Identical audio under different track IDs reuses cached computation.
 - Existing 33 engine tests remain green and new extractor/cache tests pass.
 
+### Implementation status — 2026-08-25
+
+Implemented on `codex/analysis-runtime-foundation`:
+
+- removal of the unused, unresolvable `rekordbox-db` optional dependency;
+- immutable extractor, feature, model-artifact, and model-set manifest contracts;
+- decode-once `DecodedAudio` with cached channel/sample-rate views;
+- explicit legacy, sampled, and overlapping window plans with retained evidence;
+- manifest-driven file extraction with exact registry resolution and a distinct plan per extractor;
+- content-addressed extractor cache with independent success/failure/skip, retry, and overwrite behavior;
+- a native shared-audio librosa extractor with golden legacy embedding equivalence, physical scalars, and explicit BPM confidence;
+- a compatibility adapter that fingerprints known semantic configuration, declares each legacy backend's actual internal plan, and rejects false window provenance.
+
+Deliberately deferred to Phase 2: cross-process claiming and durable cache uniqueness. The JSONL cache is process-local and transitional; SQLite migrations, unique constraints, WAL, and atomic worker claims own those requirements. CLAP and Essentia remain compatibility adapters until their native shared-audio ports receive real-model golden fixtures.
+
 ## 8. Phase 2 — Local persistence and asynchronous analysis
 
 Goal: make the local API the durable backend for the evaluation loop and future desktop sidecar.

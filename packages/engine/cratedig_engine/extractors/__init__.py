@@ -1,0 +1,27 @@
+"""Public contracts for Engine v2 feature extractors."""
+
+from cratedig_engine.extractors.base import Extractor
+from cratedig_engine.extractors.legacy import LegacyBackendExtractor
+from cratedig_engine.extractors.librosa import LibrosaExtractor
+from cratedig_engine.extractors.registry import (
+    AmbiguousExtractorError,
+    DuplicateExtractorError,
+    ExtractorNotFoundError,
+    ExtractorRegistry,
+    ExtractorRegistryError,
+    ExtractorSpecMismatchError,
+)
+from cratedig_engine.records import ExtractorSpec
+
+__all__ = [
+    "AmbiguousExtractorError",
+    "DuplicateExtractorError",
+    "Extractor",
+    "ExtractorNotFoundError",
+    "ExtractorRegistry",
+    "ExtractorRegistryError",
+    "ExtractorSpecMismatchError",
+    "ExtractorSpec",
+    "LegacyBackendExtractor",
+    "LibrosaExtractor",
+]
