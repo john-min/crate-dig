@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from cratedig_engine.audio import hash_audio_file
+
 from cratedig_local_api import audio as playback
 from cratedig_local_api import db
-from cratedig_local_api.scan import parse_filename, scan_folder
+from cratedig_local_api.analysis_routes import create_analysis_router
+from cratedig_local_api.repository import Repository
+from cratedig_local_api.runtime import (
+    RepositoryAnalysisService,
+    ensure_local_fast_manifest,
+)
+from cratedig_local_api.scan import AUDIO_EXTENSIONS, parse_filename, scan_folder_entries
 from cratedig_local_api.settings import Settings
 
 
@@ -20,8 +29,12 @@ class FolderImportBody(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     conn = db.connect(settings.sqlite_path)
+    connection_lock = threading.RLock()
+    repository = Repository(conn, connection_lock=connection_lock)
+    ensure_local_fast_manifest(repository)
     app = FastAPI(title="Crate Dig local API", version="0.1.0")
     app.state.settings = settings
+    app.state.repository = repository
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -29,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Range", "Content-Type"],
         expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     )
+    app.include_router(create_analysis_router(RepositoryAnalysisService(repository)))
 
     @app.get("/health")
     def health():
@@ -41,55 +55,102 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/libraries")
     def libraries():
-        return {"libraries": db.list_libraries(conn)}
+        with repository.synchronized():
+            return {"libraries": db.list_libraries(conn)}
 
     @app.post("/imports/folder")
     def import_folder(body: FolderImportBody):
         folder = Path(body.folder_path).expanduser()
         try:
-            files = scan_folder(folder)
+            files = scan_folder_entries(folder)
         except NotADirectoryError as exc:
             raise HTTPException(status_code=400, detail=f"Not a folder: {exc}") from exc
-        library_id = db.get_or_create_library(conn, body.library_name.strip() or "Local Music", "folder")
-        added = 0
-        for path in files:
-            artist, title = parse_filename(path)
-            db.upsert_track(
-                conn,
-                library_id=library_id,
-                title=title,
-                artist=artist,
-                location=str(path),
+        with repository.synchronized():
+            library_id = db.get_or_create_library(
+                conn, body.library_name.strip() or "Local Music", "folder"
             )
-            added += 1
-        tracks = db.list_tracks(conn, library_id)
+            added = 0
+            outcomes: list[dict[str, object]] = []
+            for path in files:
+                if path.suffix.lower() not in AUDIO_EXTENSIONS:
+                    outcomes.append(
+                        {
+                            "path": str(path),
+                            "status": "unsupported",
+                            "reason": "unsupported_extension",
+                        }
+                    )
+                    continue
+                artist, title = parse_filename(path)
+                try:
+                    stat = path.stat()
+                    audio_content_hash = hash_audio_file(path)
+                    duplicates = db.find_tracks_by_content_hash(conn, audio_content_hash)
+                    track_id = db.upsert_track(
+                        conn,
+                        library_id=library_id,
+                        title=title,
+                        artist=artist,
+                        location=str(path),
+                        audio_content_hash=audio_content_hash,
+                        file_size_bytes=stat.st_size,
+                        file_mtime_ns=stat.st_mtime_ns,
+                    )
+                except OSError as exc:
+                    outcomes.append(
+                        {
+                            "path": str(path),
+                            "status": "failed",
+                            "reason": type(exc).__name__.lower(),
+                        }
+                    )
+                    continue
+                added += 1
+                outcomes.append(
+                    {
+                        "path": str(path),
+                        "track_id": track_id,
+                        "status": "duplicate" if duplicates else "imported",
+                        "duplicate_of_track_id": duplicates[0].id if duplicates else None,
+                        "warnings": ["missing_metadata"] if not artist else [],
+                    }
+                )
+            tracks = db.list_tracks(conn, library_id)
         return {
             "library_id": library_id,
             "scanned": added,
+            "examined": len(files),
             "tracks": len(tracks),
+            "outcomes": outcomes,
         }
 
     @app.get("/libraries/{library_id}/tracks")
     def library_tracks(library_id: str):
-        libs = {row["id"] for row in db.list_libraries(conn)}
-        if library_id not in libs:
-            raise HTTPException(status_code=404, detail="Library not found")
-        return {"tracks": [_public_track(row) for row in db.list_tracks(conn, library_id)]}
+        with repository.synchronized():
+            libs = {row["id"] for row in db.list_libraries(conn)}
+            if library_id not in libs:
+                raise HTTPException(status_code=404, detail="Library not found")
+            tracks = db.list_tracks(conn, library_id)
+        return {"tracks": [_public_track(row) for row in tracks]}
 
     @app.get("/tracks")
     def all_tracks():
-        return {"tracks": [_public_track(row) for row in db.list_tracks(conn)]}
+        with repository.synchronized():
+            tracks = db.list_tracks(conn)
+        return {"tracks": [_public_track(row) for row in tracks]}
 
     @app.get("/tracks/{track_id}")
     def one_track(track_id: str):
-        row = db.get_track(conn, track_id)
+        with repository.synchronized():
+            row = db.get_track(conn, track_id)
         if not row:
             raise HTTPException(status_code=404, detail="Track not found")
         return _public_track(row)
 
     @app.get("/audio/{track_id}")
     def audio(track_id: str, request: Request):
-        row = db.get_track(conn, track_id)
+        with repository.synchronized():
+            row = db.get_track(conn, track_id)
         if not row:
             raise HTTPException(status_code=404, detail="Track not found")
         source = Path(row.location)

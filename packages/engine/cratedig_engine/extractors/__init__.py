@@ -2,7 +2,7 @@
 
 from cratedig_engine.extractors.base import Extractor
 from cratedig_engine.extractors.legacy import LegacyBackendExtractor
-from cratedig_engine.extractors.librosa import LibrosaExtractor
+from cratedig_engine.extractors.librosa import LibrosaExtractor, librosa_extractor_spec
 from cratedig_engine.extractors.registry import (
     AmbiguousExtractorError,
     DuplicateExtractorError,
@@ -24,4 +24,5 @@ __all__ = [
     "ExtractorSpec",
     "LegacyBackendExtractor",
     "LibrosaExtractor",
+    "librosa_extractor_spec",
 ]

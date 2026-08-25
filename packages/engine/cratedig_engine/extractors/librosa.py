@@ -68,18 +68,7 @@ class LibrosaExtractor:
     def __init__(self) -> None:
         import librosa  # noqa: F401 -- fail fast when the optional dep is absent
 
-        self._spec = ExtractorSpec(
-            name="librosa",
-            version=LIBROSA_EXTRACTOR_VERSION,
-            required_sample_rate_hz=LIBROSA_SAMPLE_RATE_HZ,
-            channel_policy=ChannelPolicy.MONO,
-            supported_scopes={FeatureScope.TRACK, FeatureScope.WINDOW},
-            output_roles={EmbeddingRole.RETRIEVAL},
-            configuration_version=LIBROSA_CONFIGURATION_VERSION,
-            configuration_sha256=LIBROSA_CONFIGURATION_SHA256,
-            default_window_plan_version="legacy-librosa-v1",
-            default_pooling_strategy="arithmetic-mean-v1",
-        )
+        self._spec = librosa_extractor_spec()
 
     @property
     def spec(self) -> ExtractorSpec:
@@ -188,6 +177,23 @@ class LibrosaExtractor:
             "confidence": 1.0,
             "source": FeatureSource.HEURISTIC,
         }
+
+
+def librosa_extractor_spec() -> ExtractorSpec:
+    """Return the stable contract without importing optional audio runtime deps."""
+
+    return ExtractorSpec(
+        name="librosa",
+        version=LIBROSA_EXTRACTOR_VERSION,
+        required_sample_rate_hz=LIBROSA_SAMPLE_RATE_HZ,
+        channel_policy=ChannelPolicy.MONO,
+        supported_scopes={FeatureScope.TRACK, FeatureScope.WINDOW},
+        output_roles={EmbeddingRole.RETRIEVAL},
+        configuration_version=LIBROSA_CONFIGURATION_VERSION,
+        configuration_sha256=LIBROSA_CONFIGURATION_SHA256,
+        default_window_plan_version="legacy-librosa-v1",
+        default_pooling_strategy="arithmetic-mean-v1",
+    )
 
 
 def _scalar_records(
@@ -355,4 +361,5 @@ __all__ = [
     "LIBROSA_EMBEDDING_DIMENSION",
     "LIBROSA_EXTRACTOR_VERSION",
     "LibrosaExtractor",
+    "librosa_extractor_spec",
 ]

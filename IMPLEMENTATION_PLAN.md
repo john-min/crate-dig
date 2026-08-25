@@ -382,6 +382,30 @@ Test:
 - Restarting API/worker does not lose progress.
 - Local API tests cover the new lifecycle.
 
+### Implementation status — 2026-08-25
+
+Implemented on `codex/local-analysis-worker`:
+
+- versioned SQLite migrations with WAL, foreign keys, bounded busy waits, typed float32 embedding storage, immutable manifests, evaluation tables, and content-hash snapshots;
+- durable content-addressed extractor reuse across duplicate logical tracks and later runs, with manifest changes invalidating the cache identity;
+- durable runs and extractor stages with global idempotency keys, atomic claims, worker leases, finite retries, cancellation, and terminal-state aggregation;
+- the seven analysis lifecycle/read endpoints above, backed by the same repository used by the worker;
+- a separate finite-drain worker command with `local-fast@1`, currently using the native shared-audio Librosa extractor;
+- structured import outcomes for imported, duplicate, unsupported, missing-metadata-warning, and filesystem-failed paths;
+- source-change invalidation between queue and decode, with the stable terminal code `source_changed`;
+- queryable preservation of window/stem scope, time bounds, and embedding pooling strategy;
+- serialized access to the API's shared SQLite connection so one request cannot commit another request's transaction;
+- integration coverage for migration durability, API idempotency, interruption/reclaim, cancellation, retry ceilings, real audio analysis/persistence, import/playback continuity, and source mutation.
+
+Still open within the broader Phase 2 specification: decode validation during
+import for a dedicated `corrupt` outcome, retryability/remediation fields in a
+shared local/cloud import schema, progress heartbeats within a long
+single extractor invocation, and track-level batch claims so multi-extractor
+manifests share one decode. Until that batching exists, `local-fast@1` must
+remain a one-extractor manifest. Until lease heartbeats exist, keep the local
+worker single-concurrency and do not enable slow/deep extractors. Native CLAP and Essentia ports remain later
+model work rather than requirements of this savepoint.
+
 ## 9. Phase 3 — Blind similarity lab
 
 Goal: make model quality observable and collect the data required for future ranking.

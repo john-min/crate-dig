@@ -6,30 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA = """
-create table if not exists libraries (
-  id text primary key,
-  name text not null,
-  source text not null,
-  created_at text not null,
-  updated_at text not null
-);
-
-create table if not exists tracks (
-  id text primary key,
-  library_id text not null references libraries (id) on delete cascade,
-  title text not null default '',
-  artist text not null default '',
-  album text not null default '',
-  duration_sec real,
-  location text not null default '',
-  location_kind text not null default 'file',
-  created_at text not null,
-  unique (library_id, location)
-);
-
-create index if not exists tracks_library_id_idx on tracks (library_id);
-"""
+from cratedig_local_api.migrations import migrate
 
 
 def utc_now() -> str:
@@ -38,11 +15,18 @@ def utc_now() -> str:
 
 def connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(
+        path,
+        check_same_thread=False,
+        isolation_level=None,
+        timeout=5.0,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("pragma foreign_keys = on")
-    conn.executescript(SCHEMA)
-    conn.commit()
+    conn.execute("pragma busy_timeout = 5000")
+    conn.execute("pragma journal_mode = wal")
+    conn.execute("pragma synchronous = normal")
+    migrate(conn)
     return conn
 
 
@@ -56,6 +40,9 @@ class TrackRow:
     duration_sec: float | None
     location: str
     location_kind: str
+    audio_content_hash: str | None
+    file_size_bytes: int | None
+    file_mtime_ns: int | None
     created_at: str
 
     def as_dict(self, *, missing: bool, preview_path: str) -> dict:
@@ -68,6 +55,7 @@ class TrackRow:
             "duration_sec": self.duration_sec,
             "location": self.location,
             "location_kind": self.location_kind,
+            "audio_content_hash": self.audio_content_hash,
             "missing": missing,
             "preview_url": None if missing else preview_path,
         }
@@ -84,6 +72,9 @@ def _track(row: sqlite3.Row) -> TrackRow:
         duration_sec=float(duration) if duration is not None else None,
         location=row["location"],
         location_kind=row["location_kind"],
+        audio_content_hash=row["audio_content_hash"],
+        file_size_bytes=row["file_size_bytes"],
+        file_mtime_ns=row["file_mtime_ns"],
         created_at=row["created_at"],
     )
 
@@ -124,6 +115,9 @@ def upsert_track(
     title: str,
     artist: str,
     location: str,
+    audio_content_hash: str | None = None,
+    file_size_bytes: int | None = None,
+    file_mtime_ns: int | None = None,
 ) -> str:
     existing = conn.execute(
         "select id from tracks where library_id = ? and location = ?",
@@ -131,8 +125,20 @@ def upsert_track(
     ).fetchone()
     if existing:
         conn.execute(
-            "update tracks set title = ?, artist = ?, location_kind = 'file' where id = ?",
-            (title, artist, existing["id"]),
+            """
+            update tracks
+            set title = ?, artist = ?, location_kind = 'file',
+                audio_content_hash = ?, file_size_bytes = ?, file_mtime_ns = ?
+            where id = ?
+            """,
+            (
+                title,
+                artist,
+                audio_content_hash,
+                file_size_bytes,
+                file_mtime_ns,
+                existing["id"],
+            ),
         )
         conn.commit()
         return str(existing["id"])
@@ -140,10 +146,21 @@ def upsert_track(
     conn.execute(
         """
         insert into tracks (
-          id, library_id, title, artist, album, duration_sec, location, location_kind, created_at
-        ) values (?, ?, ?, ?, '', null, ?, 'file', ?)
+          id, library_id, title, artist, album, duration_sec, location, location_kind,
+          audio_content_hash, file_size_bytes, file_mtime_ns, created_at
+        ) values (?, ?, ?, ?, '', null, ?, 'file', ?, ?, ?, ?)
         """,
-        (track_id, library_id, title, artist, location, utc_now()),
+        (
+            track_id,
+            library_id,
+            title,
+            artist,
+            location,
+            audio_content_hash,
+            file_size_bytes,
+            file_mtime_ns,
+            utc_now(),
+        ),
     )
     conn.commit()
     return track_id
@@ -163,3 +180,13 @@ def list_tracks(conn: sqlite3.Connection, library_id: str | None = None) -> list
 def get_track(conn: sqlite3.Connection, track_id: str) -> TrackRow | None:
     row = conn.execute("select * from tracks where id = ?", (track_id,)).fetchone()
     return _track(row) if row else None
+
+
+def find_tracks_by_content_hash(
+    conn: sqlite3.Connection, audio_content_hash: str
+) -> list[TrackRow]:
+    rows = conn.execute(
+        "select * from tracks where audio_content_hash = ? order by created_at, id",
+        (audio_content_hash,),
+    ).fetchall()
+    return [_track(row) for row in rows]

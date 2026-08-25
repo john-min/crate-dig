@@ -27,7 +27,7 @@ def parse_filename(path: Path) -> tuple[str, str]:
     return "", stem or path.name
 
 
-def scan_folder(folder: Path) -> list[Path]:
+def scan_folder_entries(folder: Path) -> list[Path]:
     root = folder.expanduser().resolve()
     if not root.is_dir():
         raise NotADirectoryError(str(root))
@@ -35,7 +35,14 @@ def scan_folder(folder: Path) -> list[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if path.suffix.lower() in AUDIO_EXTENSIONS:
-            found.append(path)
+        found.append(path)
     found.sort()
     return found
+
+
+def scan_folder(folder: Path) -> list[Path]:
+    return [
+        path
+        for path in scan_folder_entries(folder)
+        if path.suffix.lower() in AUDIO_EXTENSIONS
+    ]

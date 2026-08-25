@@ -48,7 +48,10 @@ def test_folder_import_and_range_playback(client: TestClient, tmp_path: Path):
     assert imported.status_code == 200
     body = imported.json()
     assert body["scanned"] == 3
+    assert body["examined"] == 4
     assert body["tracks"] == 3
+    assert any(item["status"] == "unsupported" for item in body["outcomes"])
+    assert any(item["status"] == "duplicate" for item in body["outcomes"])
 
     tracks = client.get("/tracks").json()["tracks"]
     titles = {row["title"] for row in tracks}
@@ -57,6 +60,7 @@ def test_folder_import_and_range_playback(client: TestClient, tmp_path: Path):
     assert salt["artist"] == "Anais Kerr"
     assert salt["missing"] is False
     assert salt["preview_url"] == f"/audio/{salt['id']}"
+    assert len(salt["audio_content_hash"]) == 64
 
     full = client.get(salt["preview_url"])
     assert full.status_code == 200
@@ -79,3 +83,38 @@ def test_rejects_arbitrary_paths(client: TestClient, tmp_path: Path):
     write_silence_wav(sneaky)
     res = client.get("/audio/" + str(sneaky))
     assert res.status_code == 404
+
+
+def test_app_registers_local_fast_manifest_and_queues_idempotent_analysis(
+    client: TestClient, tmp_path: Path
+):
+    folder = tmp_path / "analysis-music"
+    folder.mkdir()
+    write_silence_wav(folder / "Kaito Bloom - Nocturne Transit.wav")
+    imported = client.post(
+        "/imports/folder",
+        json={"folder_path": str(folder), "library_name": "Analysis library"},
+    ).json()
+    payload = {
+        "manifest_name": "local-fast",
+        "manifest_version": "1",
+        "mode": "fast",
+        "idempotency_key": "analysis-library-001",
+    }
+
+    first = client.post(
+        f"/libraries/{imported['library_id']}/analysis-runs", json=payload
+    )
+    replay = client.post(
+        f"/libraries/{imported['library_id']}/analysis-runs", json=payload
+    )
+
+    assert first.status_code == 202
+    assert replay.status_code == 202
+    assert replay.json()["id"] == first.json()["id"]
+    assert first.json()["manifest_name"] == "local-fast"
+    assert first.json()["stages_total"] == 1
+    progress = client.get(
+        f"/analysis-runs/{first.json()['id']}/tracks"
+    ).json()
+    assert progress["tracks"][0]["stages_total"] == 1

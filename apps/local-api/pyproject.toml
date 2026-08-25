@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 license = { text = "UNLICENSED" }
 authors = [{ name = "Crate Dig" }]
 dependencies = [
+  "cratedig-engine[fast]",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
 ]
@@ -22,6 +23,7 @@ dev = [
 
 [project.scripts]
 cratedig-local-api = "cratedig_local_api.app:main"
+cratedig-local-worker = "cratedig_local_api.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -30,4 +32,7 @@ include = ["cratedig_local_api*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-pythonpath = ["."]
+pythonpath = [".", "../../packages/engine"]
+
+[tool.uv.sources]
+cratedig-engine = { path = "../../packages/engine", editable = true }
