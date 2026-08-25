@@ -1,8 +1,8 @@
 # Crate Dig PRD
 
-Status: Draft  
-Last updated: 2026-08-20  
-Product name: Crate Dig  
+Status: Draft
+Last updated: 2026-08-25
+Product name: Crate Dig
 Tagline: Find the next record.
 
 ## 1. Summary
@@ -142,6 +142,8 @@ Requirements:
   - Extracting BPM/key/loudness
   - Generating audio features
   - Generating embeddings
+  - Separating drums/bass/vocals/other
+  - Generating stem features
   - Clustering by similarity
   - Creating waveform/previews
 - Support resumable and incremental analysis.
@@ -153,17 +155,21 @@ Implementation decision:
 - Run cloud analysis through Google Cloud Run Jobs.
 - Run the backend API through Cloud Run using Python/FastAPI.
 - Use batch jobs because analysis is occasional: primarily when the demo library changes, when new tracks are added, or when the feature/model pipeline changes.
-- Support two analysis modes:
-  - Fast analysis: metadata, BPM, key, loudness, duration, waveform, classical audio features, basic clustering.
-  - Deep analysis: embeddings, semantic/vibe tagging, CLAP or related audio-language model, richer similarity search.
-- Do not make CLAP/PyTorch mandatory before the basic product loop works. Benchmark deep analysis separately and make it selectable per analysis run.
+- Support two analysis states:
+  - Fast/ready analysis: metadata, BPM, key, loudness, duration, waveform, classical audio features, a practical global embedding, and provisional discovery.
+  - Deep/completed analysis: stronger embeddings, semantic/palette evidence, required asynchronous four-stem separation, stem-conditioned timbre features, and richer similarity search.
+- Import, playback, and provisional discovery must not wait for deep analysis.
+- Every track selected for completed analysis must attempt a versioned drums/bass/vocals/other separation. Failed separation must terminate in a visible degraded state rather than retry forever.
+- The implementation requirements and model-selection process are defined in `sonic_analysis_prd.md`; the research rationale is defined in `sonic_analysis_engine.md`.
 
-Analysis cache key should include:
+Analysis caches must be independent per extractor. Cache identity should include:
 
 - Audio file hash.
-- Analysis pipeline version.
-- Model version.
-- Feature schema version.
+- Extractor or separator name and version.
+- Exact model-weight hash where applicable.
+- Window-plan version.
+- Relevant configuration or prompt-bank version.
+- Separator identity for stem-dependent outputs.
 
 ### 5.5 Main discovery map
 
@@ -395,13 +401,25 @@ Data categories:
 
 Desktop decision:
 
-- Use SQLite locally for the Mac app.
+- Use SQLite as the Mac app's local system of record.
+- Run SQLite in WAL mode on a local application-data volume, with foreign keys, short transactions, and versioned migrations. Do not place the live database on a network-mounted music drive.
+- Store libraries, tracks, file locations, hashes, analysis jobs/stages, scalar features, embedding records, neighbors, projections, crates, and evaluation judgments in SQLite.
+- Store original audio, model checkpoints, temporary stems, previews, and large waveform artifacts in the local filesystem; SQLite stores their paths, hashes, versions, and lifecycle state.
+- Preserve embeddings at their native declared dimensions. For v1, store local vectors as typed binary arrays and run exact cosine retrieval in NumPy, with precomputed neighbors where useful.
+- Do not require a SQLite vector extension for v1. Introduce FAISS or another local ANN index only after 10,000/50,000-track benchmarks show exact search is insufficient.
+- DuckDB may be used for offline evaluation/reporting, but it is not the desktop product database.
 - Consider syncing metadata to Supabase later.
+- Sync logical domain records through versioned APIs; never synchronize or upload the SQLite database file itself.
 - Do not require internet for local analysis once dependencies/models are installed.
 - Desktop library size is user-defined, but engineering should test:
   - 10,000 tracks as the comfortable v1 target.
   - 50,000 tracks as a stretch target.
   - 100,000 metadata rows as a stress target, not necessarily 100,000 fully analyzed audio files.
+
+Cloud decision:
+
+- Supabase Postgres remains the cloud system of record, with pgvector indexes for promoted search representations.
+- Store each cloud embedding at its native declared dimension using a dimension-compatible table/index or explicit versioned projection. Do not pad or truncate unrelated model vectors into one shared fixed-width column.
 
 ### 6.5 Storage
 
@@ -490,6 +508,8 @@ Likely Python stack:
 - hdbscan
 - transformers / PyTorch for CLAP or related audio-language embeddings
 - optional Essentia for deeper audio features
+- HT-Demucs `htdemucs_ft` for the initial asynchronous four-stem stage
+- BS-RoFormer or MelBand-RoFormer only as evaluated separator challengers
 
 Analysis outputs:
 
@@ -505,6 +525,9 @@ Analysis outputs:
 - clusters
 - mood / texture / energy tags
 - waveform preview data
+- versioned drums/bass/vocals/other separation provenance
+- drum and bass timbre embeddings and physical descriptors
+- vocal-treatment and `other` instrumentation/texture evidence
 
 ## 7. Serverless/backend decision
 
@@ -546,6 +569,8 @@ Requirements:
 - Q assistant panel with constrained, actionable recommendations.
 - 3,000-track target library.
 - Full-track playback from R2-hosted private audio.
+- Tracks become visible with provisional fast analysis while required completed-analysis stages continue asynchronously.
+- Completed analysis includes a terminal four-stem separation attempt and either `ready_deep` or visible degraded status.
 
 ### Desktop MVP
 
@@ -557,6 +582,7 @@ Requirements:
 - Filter/search/find similar.
 - Save local crates.
 - Basic Q assistant using local metadata/features where possible.
+- Background four-stem and deep-feature analysis with resumable local caches.
 
 ## 10. Rekordbox interoperability
 
@@ -595,7 +621,7 @@ The app should not directly mutate Rekordbox’s internal database in MVP.
 - Full Rekordbox replacement.
 - Beatgrid editing.
 - Live DJ performance/deck controls.
-- Real-time stem separation.
+- Real-time or live-performance stem separation. Asynchronous batch separation for completed library analysis is in scope.
 - Collaborative multiplayer crates.
 - Mobile app.
 - Public music hosting platform.
@@ -607,7 +633,7 @@ The app should not directly mutate Rekordbox’s internal database in MVP.
 - Web target library size: 3,000 tracks.
 - Desktop target library size: user-defined, with engineering tests for 10k comfortable, 50k stretch, and 100k metadata-row stress scenarios.
 - Q: context-aware retrieval/action assistant with typed recommendation/action cards.
-- Cloud analysis: Cloud Run Jobs with fast/deep analysis tiers; CLAP/deep embeddings should be benchmarked before becoming mandatory.
+- Cloud analysis: Cloud Run Jobs with an immediately usable fast state and asynchronous completed analysis. Completed analysis requires a versioned four-stem separation attempt; individual deep embeddings earn production roles through the DJ gold-set bake-off.
 - Auth: Supabase Auth for MVP with Google SSO, email/password, and application-level access-code gating.
 - Visualization: Deck.gl with OrthographicView for the product map; React/DOM overlays for UI.
 - Rekordbox: spec import/export separately; MVP import Rekordbox XML, MVP export Rekordbox-compatible XML plus M3U and CSV.
@@ -615,7 +641,8 @@ The app should not directly mutate Rekordbox’s internal database in MVP.
 ## 13. Open questions
 
 - What is the exact Q v1 system design: prompt contract, tools/functions, retrieval boundaries, response schemas, and evaluation criteria?
-- Which deep-analysis model stack should be used first: CLAP, Essentia models, MERT-style embeddings, or a staged combination?
+- Does MuQ beat Discogs-EffNet-multi for primary retrieval on the DJ gold set?
+- Does HT-Demucs `htdemucs_ft` produce stable enough source-conditioned evidence, or does a documented bass/drum failure slice justify a RoFormer alternative?
 - What is the exact Rekordbox XML subset required for MVP export compatibility?
 - Should the web demo store original lossless files, FLAC-normalized copies, browser-friendly preview derivatives, or all three?
 - What is the minimum useful desktop offline model bundle size?
@@ -623,3 +650,5 @@ The app should not directly mutate Rekordbox’s internal database in MVP.
 ## 14. Related docs
 
 - [Design prompt](./design.md)
+- [Sonic analysis backend PRD](./sonic_analysis_prd.md)
+- [Sonic analysis engine strategy](./sonic_analysis_engine.md)

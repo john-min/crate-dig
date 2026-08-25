@@ -6,7 +6,7 @@ import type { MapCanvasProps } from "./types";
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
   loading: () => (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[oklch(0.145_0.012_72)]">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#08090b]">
       <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-serif text-2xl tracking-tight text-paper-dim">
         Map loading
       </p>

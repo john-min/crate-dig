@@ -2,6 +2,26 @@
 
 Python analysis engine for Crate Dig. Fast analysis (librosa) runs without CLAP or PyTorch. CLAP and Essentia are optional backends.
 
+Implementation requirements:
+
+- [`CRATE_DIG_ENGINE_PRD.md`](../../CRATE_DIG_ENGINE_PRD.md)
+- [`sonic_analysis_engine.md`](../../sonic_analysis_engine.md)
+
+## Current and target architecture
+
+The current engine is an MVP:
+
+- one `AudioBackend` runs per analysis
+- each backend decodes independently
+- one embedding and a JSON feature dictionary are emitted
+- the Cloud Run job analyzes and clusters in one process
+- waveforms/previews are stubs
+- source separation is not implemented yet
+
+`AudioBackend` remains a compatibility surface while the engine migrates to shared `DecodedAudio`, versioned windows, independent extractors, per-extractor caches, explicit embedding roles, a frozen map projection, and mandatory asynchronous four-stem processing for completed analysis.
+
+The initial separator target is HT-Demucs `htdemucs_ft`. It belongs in a dedicated local/cloud worker environment; it must not be added to synchronous API handlers or make import/playback wait.
+
 ## Local tests
 
 ```bash
@@ -40,7 +60,7 @@ docker build -t cratedig-engine -f packages/engine/Dockerfile packages/engine
 docker run --rm --env-file .env cratedig-engine analyze-run --analysis-run-id <uuid>
 ```
 
-The image is Python 3.12 with librosa extras, ffmpeg (for later preview work), and libsndfile.
+The current image is Python 3.12 with librosa extras, ffmpeg (for later preview work), and libsndfile. It does not yet contain CLAP, Essentia, PyTorch, or Demucs. The stem worker requires a separate image/dependency profile and GPU-capable cloud configuration where benchmarks justify it.
 
 ### Stubs
 

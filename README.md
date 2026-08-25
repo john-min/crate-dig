@@ -9,6 +9,8 @@ This repository is documentation-led on `main`. Implementation lives on feature 
 ## Docs
 
 - [PRD](./PRD.md)
+- [Engine PRD](./CRATE_DIG_ENGINE_PRD.md)
+- [Sonic analysis strategy](./sonic_analysis_engine.md)
 - [Design prompt](./design.md)
 - [Jeff branch review](./JEFF_BRANCH_REVIEW.md)
 - [External services setup](./EXTERNAL_SETUP.md)
@@ -44,7 +46,7 @@ pip install -e ".[fast,dev]"
 pytest
 ```
 
-Fast analysis uses librosa and does not require CLAP or PyTorch. Deep analysis (CLAP) and Essentia are optional extras.
+The implemented baseline uses a single librosa/CLAP/Essentia backend per run. The target engine keeps fast analysis lightweight, then completes asynchronous versioned stem and deep-feature stages. See the engine PRD for the migration contract; mandatory completed analysis does not mean import or playback waits for PyTorch.
 
 Cloud Run Job MVP:
 

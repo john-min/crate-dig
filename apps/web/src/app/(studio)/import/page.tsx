@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { UploadDropzone } from "@/components/import/UploadDropzone";
+import { LocalFolderImport } from "@/components/import/LocalFolderImport";
 
 export const metadata: Metadata = { title: "Import" };
 
@@ -20,18 +21,21 @@ export default function ImportPage() {
           Bring the records in
         </h1>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-paper-dim">
-          Web demo uploads stay private. Rekordbox XML parsing is next; this
-          shell is the drop target.
+          On this Mac, play from the file path on disk. The hosted demo still
+          uses private uploads; Rekordbox XML is next.
         </p>
+        <div className="mt-10">
+          <LocalFolderImport />
+        </div>
         <div className="mt-10">
           <UploadDropzone />
         </div>
         <div className="mt-10">
           <Link
-            href="/analysis"
+            href="/map"
             className="inline-flex h-11 items-center rounded-full bg-amber px-6 text-[15px] font-medium text-ink hover:bg-amber/90"
           >
-            Continue to analysis
+            Open the map
           </Link>
         </div>
       </main>

@@ -8,6 +8,7 @@ export type MapTrack = {
   key?: string;
   genre?: string;
   mood?: string;
+  energy?: string;
   x?: number;
   y?: number;
   umap_x?: number;

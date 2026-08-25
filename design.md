@@ -1,5 +1,15 @@
 # Crate Dig — Claude Design Prompt
 
+## Current design handoff
+
+The original prompt below established the Crate Dig visual/product direction. After reviewing the Claude Design v1 export with Impeccable, the current canonical next-step design handoff is:
+
+- [CLAUDE_DESIGN_V2_PROMPT.md](./CLAUDE_DESIGN_V2_PROMPT.md) — paste-ready prompt for a refined Claude Design v2 output.
+- [DESIGN_REFINEMENT_SPEC.md](./DESIGN_REFINEMENT_SPEC.md) — implementation-oriented refinement requirements for engineering/design handoff.
+- [.impeccable/critique/2026-08-20T22-48-23Z__crate-dig-deisgn-system-v1-html.md](./.impeccable/critique/2026-08-20T22-48-23Z__crate-dig-deisgn-system-v1-html.md) — critique of the v1 Claude Design export.
+
+The v2 refinement should preserve the dark, nocturnal, music-native direction, Q as a contextual crate-digging assistant, the map/constellation metaphor, and the import/analysis emotional arc. It should improve map explainability, Q actionability, accessibility/semantics, edge states, typography/contrast, responsive layout, and privacy/storage copy. The prototype screen-picker issue is known but intentionally out of scope for the v2 refinement pass.
+
 Use this prompt with Claude Design to generate product screens for Crate Dig.
 
 ```txt

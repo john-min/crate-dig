@@ -1,10 +1,12 @@
 # Cursor Engineering Handoff
 
-Status: Ready for implementation planning  
-Last updated: 2026-08-20  
+Status: Foundation implemented; engine refactor ready for planning
+Last updated: 2026-08-25
 Primary product docs:
 
 - [PRD.md](./PRD.md)
+- [CRATE_DIG_ENGINE_PRD.md](./CRATE_DIG_ENGINE_PRD.md)
+- [sonic_analysis_engine.md](./sonic_analysis_engine.md)
 - [design.md](./design.md)
 - [JEFF_BRANCH_REVIEW.md](./JEFF_BRANCH_REVIEW.md)
 - [EXTERNAL_SETUP.md](./EXTERNAL_SETUP.md)
@@ -56,6 +58,9 @@ Do not re-litigate these unless new evidence appears.
 - Frontend hosting: Vercel.
 - Backend API: Python + FastAPI on Google Cloud Run.
 - Batch analysis: Google Cloud Run Jobs.
+- Completed analysis: mandatory asynchronous drums/bass/vocals/other separation using a pinned, versioned separator.
+- Initial separator: HT-Demucs `htdemucs_ft`; separation must not block import, playback, or provisional fast discovery.
+- Similarity architecture: one explicit layout embedding plus independently versioned retrieval, rhythm, timbre, palette, stem, and scalar evidence.
 - Web database: Supabase Postgres.
 - Vector search: pgvector.
 - Auth: Supabase Auth for MVP.
@@ -169,11 +174,13 @@ Tasks:
 
    Preferred: recreate cleanly from `origin/jeff` instead of editing stale worktree metadata.
 
-3. Create an implementation branch:
+3. Create a scoped implementation branch for the current slice:
 
    ```bash
-   git switch -c codex/engine-foundation
+   git switch -c feature/engine-extractor-foundation
    ```
+
+   Use short-lived, descriptive feature branches rather than a permanent personal branch. Keep one independently reviewable implementation slice per branch, created from the reviewed baseline. Follow-on examples include `feature/local-analysis-worker`, `feature/similarity-lab`, and `feature/fast-map-integration`.
 
 4. Add `.gitignore` entries for generated artifacts:
 
@@ -277,7 +284,7 @@ Initial schemas:
 
 ### 8.2 Backend interface
 
-Define a stable interface:
+The following stable interface was implemented for the engine-foundation milestone:
 
 ```python
 class AudioBackend(Protocol):
@@ -294,9 +301,25 @@ Initial backend priorities:
 2. CLAP deep backend behind an optional dependency group.
 3. Essentia as an experimental/optional backend.
 
+`AudioBackend` is now a compatibility interface, not the final architecture. The next engine milestone must migrate toward:
+
+```txt
+DecodedAudio
+  -> WindowPlan
+  -> independent Extractors
+  -> FeatureBundle
+
+DecodedAudio
+  -> StemSeparator
+  -> versioned StemBundle
+  -> stem-dependent Extractors
+```
+
+Preserve existing backends behind adapters while adding decode-once audio views, per-extractor outputs, explicit embedding roles, window/stem scope, and independent caches.
+
 ### 8.3 Analysis modes
 
-Implement two modes:
+Expose two user-visible analysis states:
 
 - `fast`
   - metadata
@@ -305,11 +328,13 @@ Implement two modes:
   - classical features
   - basic clustering
 - `deep`
-  - embeddings
-  - CLAP/semantic tags
-  - richer similarity
+  - stronger embeddings and palette evidence
+  - mandatory asynchronous four-stem separation attempt
+  - required drum/bass features
+  - required vocal-treatment and `other` instrumentation/texture descriptors
+  - richer component-aware similarity
 
-Do not block the whole product on CLAP/PyTorch.
+Fast results must keep the product usable while deep analysis runs. A failed required deep stage terminates as degraded; it must not retry forever or remove valid fast evidence.
 
 ### 8.4 Cache/idempotency
 
@@ -326,7 +351,7 @@ Each analysis result should include:
 - `feature_schema_version`
 - `created_at`
 
-Permanent failures should not be retried unless source metadata changes.
+The current pipeline-wide cache is an implemented baseline. Migrate to content-addressed per-extractor and per-separator caches as defined in `CRATE_DIG_ENGINE_PRD.md`. Do not include `track_id` in expensive computation identity. Permanent failures should not be retried unless the relevant source hash, extractor/separator identity, configuration, or explicit retry changes.
 
 ### 8.5 Tests
 
@@ -361,6 +386,7 @@ Expected tables:
 - `tracks`
 - `audio_objects`
 - `analysis_runs`
+- `analysis_jobs`
 - `track_features`
 - `track_embeddings`
 - `clusters`
@@ -377,12 +403,7 @@ Required extension:
 create extension if not exists vector;
 ```
 
-Initial vector dimensions may differ by model. Either:
-
-- start with one fixed embedding column for the chosen model, or
-- use separate embedding rows with `model_name`, `dimensions`, and a vector column per model family.
-
-Cursor should propose the schema before applying migrations.
+The initial schema exists and currently stores coarse JSONB features plus one embedding per model/run. The next migration must support independently versioned records with extractor, role, scope, stem, time range, pooling strategy, confidence, and content hash. It must also persist separator provenance and stage-level jobs without destroying compatibility with current runs.
 
 ## 10. Phase 4: Cloud Run Job MVP
 
@@ -404,7 +425,16 @@ Behavior:
 6. Write previews/waveforms/artifacts to R2 as needed.
 7. Update progress and errors.
 
-Do not build a huge orchestration system yet. Make one job work end-to-end.
+The single end-to-end job is implemented and should remain operational during refactoring. The next target is staged, resumable orchestration:
+
+```txt
+fast analysis
+  -> separation
+  -> stem/deep extractors
+  -> projection and neighbors
+```
+
+Stages must cache and fail independently. Cloud workers may be separate job types where GPU/runtime dependencies differ, while local execution follows the same logical stage graph.
 
 ## 11. Phase 5: Web app shell
 
@@ -474,6 +504,11 @@ The next major milestone is complete when:
 - Web shell boots locally.
 - Access-code auth flow is stubbed or implemented.
 - Deck.gl map renders representative 3k-track fixture data.
+- The current `AudioBackend` runs through a compatibility adapter over the new extractor contracts.
+- Decode-once audio, `WindowPlan`, `FeatureBundle`, `StemSeparator`, and `StemBundle` contracts are tested.
+- HT-Demucs `htdemucs_ft` separation runs asynchronously and records provenance, confidence, and terminal degraded failures.
+- Track embeddings/features can represent role, scope, stem, and time range.
+- New tracks transform through a persisted projection instead of refitting UMAP.
 
 ## 14. Non-goals for this handoff
 
@@ -489,7 +524,7 @@ The next major milestone is complete when:
 
 - Favor boring, testable module boundaries.
 - Keep fast analysis working without large ML dependencies.
-- Put deep-analysis dependencies behind optional extras.
+- Keep deep-analysis dependencies in dedicated optional/worker environments even though completed analysis requires the deep stage.
 - Preserve local/offline compatibility for the future desktop app.
 - Keep environment variables out of Git.
 - Prefer migration files over dashboard-only database changes.

@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { MapCanvas } from "@/components/map/MapCanvas";
+import { AppShell } from "@/components/shell/AppShell";
 
 export const metadata: Metadata = { title: "Map" };
 
-/** Ungated Deck.gl map demo using the synthetic 3k fixture. */
+/** Ungated high-fidelity discovery prototype with mock library data. */
 export default function MapDemoPage() {
-  return (
-    <main className="h-dvh w-full bg-ink">
-      <MapCanvas />
-    </main>
-  );
+  return <AppShell signedIn={false} />;
 }

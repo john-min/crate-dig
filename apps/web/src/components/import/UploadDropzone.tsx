@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const ACCEPT = [".mp3", ".wav", ".aiff", ".aif", ".flac", ".m4a", ".xml"];
+const ACCEPT = [".mp3", ".mp4", ".m4a", ".wav", ".aiff", ".aif", ".flac", ".aac", ".ogg", ".xml"];
 
 export function UploadDropzone() {
   const [files, setFiles] = useState<File[]>([]);
@@ -42,7 +42,7 @@ export function UploadDropzone() {
           Drop a folder, files, or Rekordbox XML
         </p>
         <p className="mt-3 max-w-md text-[14px] leading-relaxed text-muted">
-          MP3, WAV, AIFF, FLAC, M4A. Rekordbox XML import lands in a later pass.
+          MP3, M4A/MP4, WAV, FLAC, AAC, AIFF. Rekordbox XML import lands in a later pass.
           Audio goes to private storage with signed URLs — not through the web
           app.
         </p>

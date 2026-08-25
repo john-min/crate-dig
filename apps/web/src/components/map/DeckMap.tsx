@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeckGL } from "@deck.gl/react";
 import { OrthographicView, type OrthographicViewState, type PickingInfo } from "@deck.gl/core";
-import { ScatterplotLayer } from "@deck.gl/layers";
+import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import fixture from "@/data/synthetic-tracks-3k.json";
 import type { MapTrack } from "@/lib/types/track";
-import type { ColorBy, MapCanvasProps, MapFilters, PlotTrack } from "./types";
+import type { ColorBy, MapCanvasProps, PlotTrack } from "./types";
 import { toPlotTracks } from "./normalize";
-import { matchesFilters, mergeFilters } from "./filters";
 import { dimFill, glowFill, HIGHLIGHT, trackFill } from "./colors";
 import { fitTracksToView } from "./fitView";
-import { MapOverlays, buildLegend } from "./MapOverlays";
+import { glowRadiusFromScore, radiusFromScore } from "./radius";
+import { MapOverlays } from "./MapOverlays";
 
 const VIEW = new OrthographicView({
   id: "track-map",
@@ -26,23 +26,27 @@ const VIEW = new OrthographicView({
   },
 });
 
-const EMPTY_FILTERS: MapFilters = {};
-
 export default function DeckMap({
   tracks,
   selectedTrackId = null,
   playingTrackId = null,
   seedTrackIds,
-  filters: parentFilters,
+  visibleIds,
   colorBy: colorByProp,
+  scores,
   onSelectTrack,
   onHoverTrack,
+  onColorBy,
+  onWebgl,
   className = "",
 }: MapCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [userView, setUserView] = useState<OrthographicViewState | null>(null);
   const [viewKey, setViewKey] = useState<string | null>(null);
+  const [localColorBy, setLocalColorBy] = useState<ColorBy>("mood");
+  const [internalSelected, setInternalSelected] = useState<string | null>(null);
+  const [hover, setHover] = useState<{ x: number; y: number; track: PlotTrack } | null>(null);
 
   const usingFixture = !tracks?.length;
   const plotTracks = useMemo(() => {
@@ -50,41 +54,23 @@ export default function DeckMap({
     return toPlotTracks(source);
   }, [tracks, usingFixture]);
 
-  const [localFilters, setLocalFilters] = useState<MapFilters>(EMPTY_FILTERS);
-  const [localColorBy, setLocalColorBy] = useState<ColorBy>("cluster");
-  const [internalSelected, setInternalSelected] = useState<string | null>(null);
-  const [internalPlaying, setInternalPlaying] = useState<string | null>(null);
-  const [internalSeeds, setInternalSeeds] = useState<string[]>([]);
-  const [hover, setHover] = useState<{ x: number; y: number; track: PlotTrack } | null>(null);
-
   const colorBy = colorByProp ?? localColorBy;
-  const filters = mergeFilters(parentFilters, localFilters);
   const selectedId = selectedTrackId ?? internalSelected;
-  const playingId = playingTrackId ?? internalPlaying;
-  const seedIds = useMemo(
-    () => new Set(seedTrackIds ?? internalSeeds),
-    [seedTrackIds, internalSeeds],
-  );
-
-  const selected = useMemo(
-    () => plotTracks.find((t) => t.id === selectedId) ?? null,
-    [plotTracks, selectedId],
-  );
+  const playingId = playingTrackId;
+  const seedIds = useMemo(() => new Set(seedTrackIds ?? []), [seedTrackIds]);
 
   const { visible, dimmed } = useMemo(() => {
+    if (!visibleIds) return { visible: plotTracks, dimmed: [] as PlotTrack[] };
     const vis: PlotTrack[] = [];
     const dim: PlotTrack[] = [];
     for (const track of plotTracks) {
-      if (matchesFilters(track, filters)) vis.push(track);
+      if (visibleIds.has(track.id)) vis.push(track);
       else dim.push(track);
     }
     return { visible: vis, dimmed: dim };
-  }, [plotTracks, filters]);
+  }, [plotTracks, visibleIds]);
 
-  const seeds = useMemo(
-    () => plotTracks.filter((t) => seedIds.has(t.id)),
-    [plotTracks, seedIds],
-  );
+  const seeds = useMemo(() => plotTracks.filter((t) => seedIds.has(t.id)), [plotTracks, seedIds]);
   const playing = useMemo(
     () => plotTracks.filter((t) => t.id === playingId),
     [plotTracks, playingId],
@@ -94,17 +80,41 @@ export default function DeckMap({
     [plotTracks, selectedId],
   );
 
-  const legend = useMemo(() => buildLegend(visible, colorBy), [visible, colorBy]);
+  const labels = useMemo(() => {
+    const acc = new Map<number, { name: string; x: number; y: number; n: number }>();
+    for (const track of visible) {
+      if (track.cluster < 0) continue;
+      const cur = acc.get(track.cluster);
+      if (cur) {
+        cur.x += track.x;
+        cur.y += track.y;
+        cur.n += 1;
+      } else {
+        acc.set(track.cluster, { name: track.clusterName.toUpperCase(), x: track.x, y: track.y, n: 1 });
+      }
+    }
+    return [...acc.values()]
+      .filter((c) => c.n >= 12)
+      .map((c) => ({ name: c.name, x: c.x / c.n, y: c.y / c.n }));
+  }, [visible]);
 
   const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}`;
   const fitted = useMemo(
     () => fitTracksToView(plotTracks, size.width, size.height),
     [plotTracks, size.height, size.width],
   );
+  const fittedView = useMemo(
+    () =>
+      ({
+        target: fitted.target,
+        zoom: fitted.zoom,
+        minZoom: -3,
+        maxZoom: 8,
+      }) as OrthographicViewState,
+    [fitted.target, fitted.zoom],
+  );
   const viewState: OrthographicViewState =
-    userView && viewKey === dataKey
-      ? userView
-      : { target: fitted.target, zoom: fitted.zoom, minZoom: -3, maxZoom: 8 };
+    userView && viewKey === dataKey ? userView : fittedView;
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -114,6 +124,18 @@ export default function DeckMap({
     });
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      const ok = Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+      onWebgl?.(ok);
+    } catch {
+      onWebgl?.(false);
+    }
+    // Detect once on mount; parent toggle is the list-fallback control.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyFit = useCallback(() => {
@@ -146,21 +168,22 @@ export default function DeckMap({
     [select],
   );
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") select(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [select]);
+  const scoreOf = useCallback(
+    (id: string) => scores?.[id] ?? null,
+    [scores],
+  );
 
   const layers = useMemo(() => {
     const common = {
       pickable: false,
       radiusUnits: "pixels" as const,
-      radiusMinPixels: 1,
+      radiusMinPixels: 1.4,
       antialiasing: true,
     };
+    const hasScores = Boolean(scores && Object.keys(scores).length);
+    const fillKey = `${colorBy}:${hasScores}:${Object.keys(scores ?? {}).length}`;
+    const radiusOf = (id: string) => radiusFromScore(scoreOf(id));
+    const glowOf = (id: string) => glowRadiusFromScore(scoreOf(id));
 
     return [
       new ScatterplotLayer<PlotTrack>({
@@ -168,7 +191,7 @@ export default function DeckMap({
         id: "tracks-dim",
         data: dimmed,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 2.2,
+        getRadius: 2.0,
         getFillColor: dimFill(),
       }),
       new ScatterplotLayer<PlotTrack>({
@@ -176,9 +199,9 @@ export default function DeckMap({
         id: "tracks-glow",
         data: visible,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 11,
-        getFillColor: (d) => glowFill(d, colorBy),
-        updateTriggers: { getFillColor: colorBy },
+        getRadius: (d) => glowOf(d.id),
+        getFillColor: (d) => glowFill(d, colorBy, scoreOf(d.id)),
+        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -186,9 +209,9 @@ export default function DeckMap({
         data: visible,
         pickable: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 4.2,
-        getFillColor: (d) => trackFill(d, colorBy),
-        updateTriggers: { getFillColor: colorBy },
+        getRadius: (d) => radiusOf(d.id),
+        getFillColor: (d) => trackFill(d, colorBy, 210, scoreOf(d.id)),
+        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -196,12 +219,12 @@ export default function DeckMap({
         data: seeds,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 8,
-        getFillColor: (d) => trackFill(d, colorBy, 255),
+        getRadius: (d) => Math.max(radiusOf(d.id), 7.4),
+        getFillColor: (d) => trackFill(d, colorBy, 255, scoreOf(d.id)),
         getLineColor: [...HIGHLIGHT.seed, 240],
         getLineWidth: 1.5,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: colorBy },
+        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -209,11 +232,12 @@ export default function DeckMap({
         data: playing,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 9,
+        getRadius: (d) => Math.max(radiusOf(d.id), 7.8),
         getFillColor: [...HIGHLIGHT.playing, 230],
         getLineColor: [232, 224, 210, 220],
         getLineWidth: 1.5,
         lineWidthUnits: "pixels",
+        updateTriggers: { getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -221,20 +245,74 @@ export default function DeckMap({
         data: selectedArr,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 10,
-        getFillColor: (d) => trackFill(d, colorBy, 255),
+        getRadius: (d) => Math.max(radiusOf(d.id), 8.2),
+        getFillColor: (d) => trackFill(d, colorBy, 255, scoreOf(d.id)),
         getLineColor: [...HIGHLIGHT.selected, 255],
         getLineWidth: 2,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: colorBy },
+        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
+      }),
+      new TextLayer({
+        id: "cluster-labels",
+        data: labels,
+        getPosition: (d: { x: number; y: number }) => [d.x, d.y],
+        getText: (d: { name: string }) => d.name,
+        getSize: 12,
+        getColor: [232, 224, 210, 140],
+        getTextAnchor: "middle",
+        getAlignmentBaseline: "center",
+        fontFamily: "Instrument Sans, ui-sans-serif, sans-serif",
+        fontSettings: { sdf: false },
+        pickable: false,
       }),
     ];
-  }, [colorBy, dimmed, playing, seeds, selectedArr, visible]);
+  }, [colorBy, dimmed, labels, playing, scoreOf, scores, seeds, selectedArr, visible]);
+
+  const panZoom = useCallback(
+    (event: React.KeyboardEvent) => {
+      const vs = viewState;
+      const zoom = typeof vs.zoom === "number" ? vs.zoom : 0;
+      const target = (vs.target ?? [0, 0, 0]) as [number, number, number];
+      const step = 0.35 / Math.pow(2, zoom);
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setUserView({ ...vs, target: [target[0] - step, target[1], 0], zoom, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setUserView({ ...vs, target: [target[0] + step, target[1], 0], zoom, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setUserView({ ...vs, target: [target[0], target[1] + step, 0], zoom, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setUserView({ ...vs, target: [target[0], target[1] - step, 0], zoom, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        setUserView({ ...vs, target, zoom: zoom + 0.4, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        setUserView({ ...vs, target, zoom: zoom - 0.4, minZoom: -3, maxZoom: 8 });
+        setViewKey(dataKey);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        applyFit();
+      }
+    },
+    [applyFit, dataKey, viewState],
+  );
 
   return (
     <div
       ref={wrapRef}
-      className={`relative h-full min-h-0 w-full overflow-hidden bg-[oklch(0.145_0.012_72)] ${className}`}
+      className={`relative h-full min-h-0 w-full overflow-hidden bg-[#08090b] ${className}`}
+      tabIndex={0}
+      aria-label="Library map. Arrow keys pan, plus and minus zoom, Home fits the view."
+      onKeyDown={panZoom}
     >
       <DeckGL
         views={VIEW}
@@ -254,25 +332,15 @@ export default function DeckMap({
       <div className="pointer-events-none absolute inset-0">
         <MapOverlays
           colorBy={colorBy}
-          onColorBy={setLocalColorBy}
-          filters={filters}
-          onFilters={setLocalFilters}
+          onColorBy={(value) => {
+            setLocalColorBy(value);
+            onColorBy?.(value);
+          }}
           visibleCount={visible.length}
           totalCount={plotTracks.length}
           usingFixture={usingFixture}
-          legend={legend}
-          selected={selected}
-          playingId={playingId}
-          seedIds={seedIds}
           hover={hover}
           onFit={applyFit}
-          onClearSelection={() => select(null)}
-          onPlay={(track) => setInternalPlaying(track.id)}
-          onToggleSeed={(track) => {
-            setInternalSeeds((prev) =>
-              prev.includes(track.id) ? prev.filter((id) => id !== track.id) : [...prev, track.id],
-            );
-          }}
         />
       </div>
     </div>

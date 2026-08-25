@@ -24,6 +24,7 @@ export function toPlotTrack(track: MapTrack): PlotTrack | null {
     bpm: typeof track.bpm === "number" && Number.isFinite(track.bpm) ? track.bpm : null,
     key: track.key ?? "",
     mood: track.mood || "warm",
+    energy: track.energy ?? "",
     x,
     y,
     cluster,
