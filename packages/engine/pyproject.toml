@@ -30,6 +30,9 @@ deep = [
 essentia = [
   "essentia",
 ]
+discogs-effnet = [
+  "essentia-tensorflow==2.1b6.dev1389",
+]
 cluster-quality = [
   "umap-learn>=0.5",
   "hdbscan>=0.8",

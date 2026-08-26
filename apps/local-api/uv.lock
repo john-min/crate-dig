@@ -375,6 +375,7 @@ requires-dist = [
     { name = "cratedig-engine", extras = ["fast"], marker = "extra == 'dev'" },
     { name = "cratedig-engine", extras = ["fast"], marker = "extra == 'job'" },
     { name = "essentia", marker = "extra == 'essentia'" },
+    { name = "essentia-tensorflow", marker = "extra == 'discogs-effnet'", specifier = "==2.1b6.dev1389" },
     { name = "hdbscan", marker = "extra == 'cluster-quality'", specifier = ">=0.8" },
     { name = "librosa", marker = "extra == 'fast'", specifier = ">=0.10" },
     { name = "numpy", specifier = ">=1.26" },
@@ -388,7 +389,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'deep'", specifier = ">=4.40" },
     { name = "umap-learn", marker = "extra == 'cluster-quality'", specifier = ">=0.5" },
 ]
-provides-extras = ["fast", "deep", "essentia", "cluster-quality", "job", "dev"]
+provides-extras = ["fast", "deep", "essentia", "discogs-effnet", "cluster-quality", "job", "dev"]
 
 [[package]]
 name = "cratedig-local-api"
