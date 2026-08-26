@@ -7,7 +7,6 @@ import { useStudio } from "./StudioProvider";
 import { SimilarityReasonStack } from "./SimilarityReasonStack";
 import { Waveform } from "./Waveform";
 import { IconClose } from "./icons";
-import { nearbyTracks } from "@/lib/studio/similarity";
 
 export function TrackDrawer({ asSheet = false }: { asSheet?: boolean }) {
   const s = useStudio();
@@ -25,7 +24,9 @@ export function TrackDrawer({ asSheet = false }: { asSheet?: boolean }) {
   if (!s.drawerOpen || !track) return null;
 
   const peaks = waveformPeaks(track.id);
-  const neighbors = nearbyTracks(track, s.tracks, 6);
+  const neighbors = s.seed
+    ? s.candidates.filter((candidate) => candidate.id !== track.id && s.scoreFor(candidate) != null).slice(0, 6)
+    : [];
   const similarEmpty = neighbors.length === 0;
   const progress = track.durationSec ? s.playheadSec / track.durationSec : 0;
   const isPlaying = s.playing?.id === track.id && s.playStatus === "playing";

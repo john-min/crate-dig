@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { importFolder, localApiHealth } from "@/lib/studio/local-api";
+import type { LocalImportCapability } from "@crate-dig/contracts";
+import { normalizeAdapterError } from "@/lib/adapters/errors";
 
-export function LocalFolderImport() {
+export function LocalFolderImport({ importer }: { importer: LocalImportCapability }) {
   const router = useRouter();
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<"idle" | "working" | "ok" | "offline" | "error">("idle");
@@ -16,20 +17,16 @@ export function LocalFolderImport() {
     if (!folder) return;
     setStatus("working");
     setMessage("");
-    const up = await localApiHealth();
-    if (!up) {
-      setStatus("offline");
-      setMessage("Local API is not running. Start it with: cd apps/local-api && uvicorn cratedig_local_api.app:create_app --factory --host 127.0.0.1 --port 8000");
-      return;
-    }
     try {
-      const result = await importFolder(folder);
+      const result = await importer.importFolder({ folderPath: folder });
       setStatus("ok");
-      setMessage(`Indexed ${result.scanned} files from disk. Playback uses those paths.`);
+      const imported = result.outcomes.filter((outcome) => outcome.status === "imported").length;
+      setMessage(`Indexed ${imported} files from disk. Playback uses those paths.`);
       router.push("/map");
     } catch (err) {
-      setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Import failed");
+      const error = normalizeAdapterError(err);
+      setStatus(error.code === "LOCAL_API_UNAVAILABLE" ? "offline" : "error");
+      setMessage(error.message);
     }
   }
 

@@ -76,7 +76,10 @@ def test_folder_import_and_range_playback(client: TestClient, tmp_path: Path):
     ranged = client.get(salt["preview_url"], headers={"Range": "bytes=0-31"})
     assert ranged.status_code == 206
     assert ranged.content == payload[:32]
+    assert ranged.headers["accept-ranges"] == "bytes"
+    assert ranged.headers["content-length"] == "32"
     assert ranged.headers["content-range"].startswith("bytes 0-31/")
+    assert ranged.headers["content-type"].startswith("audio/")
 
     unknown = client.get("/audio/not-a-track")
     assert unknown.status_code == 404

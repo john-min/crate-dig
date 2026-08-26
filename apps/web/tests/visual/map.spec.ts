@@ -14,7 +14,9 @@ test("Map discovery shell", async ({ page }) => {
 test("Map with Q open", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/map?source=mock");
-  await page.getByRole("button", { name: "Ask Q" }).click();
+  await expect(page.getByPlaceholder("Search or describe a vibe…")).toBeVisible();
+  await expect(page.getByText("Records in view", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Ask Q", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Q assistant" })).toBeVisible();
   await expect(page).toHaveScreenshot("map-q-desktop.png", {
     animations: "disabled",

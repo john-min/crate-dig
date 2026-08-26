@@ -10,10 +10,80 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal, Mapping, Protocol, Sequence
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 JsonObject = Mapping[str, Any]
+
+
+class ExtensibleResponse(BaseModel):
+    """Stable fields plus typed forward-compatible repository properties."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class AnalysisRunResponse(ExtensibleResponse):
+    id: str
+    status: str
+    library_id: str | None = None
+    manifest_id: str | None = None
+    manifest_name: str | None = None
+    manifest_version: str | None = None
+    mode: Literal["fast", "deep"] | None = None
+    reason_code: str | None = None
+
+
+class AnalysisRunTrackResponse(ExtensibleResponse):
+    id: str | None = None
+    track_id: str | None = None
+    status: str | None = None
+    stages_total: int | None = None
+    stages_done: int | None = None
+    stages_running: int | None = None
+    stages_failed: int | None = None
+
+
+class AnalysisRunTracksResponse(BaseModel):
+    run_id: str
+    tracks: list[AnalysisRunTrackResponse]
+
+
+class AnalysisStageResponse(ExtensibleResponse):
+    id: str
+    status: str
+    attempt_count: int
+    max_attempts: int | None = None
+    retryable: bool | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class TrackAnalysisResponse(BaseModel):
+    track_id: str
+    run_id: str | None = None
+    stages: list[dict[str, JsonValue]] = Field(default_factory=list)
+    features: list[dict[str, JsonValue]] = Field(default_factory=list)
+    embeddings: list[dict[str, JsonValue]] = Field(default_factory=list)
+    state: str | None = None
+
+
+class NeighborResponse(ExtensibleResponse):
+    target_track_id: str | None = None
+    track_id: str | None = None
+    rank: int
+    score: float
+    distance: float | None = None
+    channel: str | None = None
+    components: dict[str, float] = Field(default_factory=dict)
+    reason_codes: list[str] = Field(default_factory=list)
+
+
+class TrackNeighborsResponse(BaseModel):
+    track_id: str
+    run_id: str | None
+    channel: str | None
+    limit: int
+    neighbors: list[NeighborResponse]
 
 
 class CreateAnalysisRunRequest(BaseModel):
@@ -159,6 +229,8 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
     @router.post(
         "/libraries/{library_id}/analysis-runs",
         status_code=status.HTTP_202_ACCEPTED,
+        response_model=AnalysisRunResponse,
+        response_model_exclude_unset=True,
     )
     def create_run(library_id: str, body: CreateAnalysisRunRequest):
         manifest = service.resolve_model_set_manifest(
@@ -181,14 +253,22 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
         except AnalysisAPIError as exc:
             _raise_http(exc)
 
-    @router.get("/analysis-runs/{run_id}")
+    @router.get(
+        "/analysis-runs/{run_id}",
+        response_model=AnalysisRunResponse,
+        response_model_exclude_unset=True,
+    )
     def get_run(run_id: str):
         run = service.get_analysis_run(run_id)
         if run is None:
             _raise_http(AnalysisNotFoundError("Analysis run was not found"))
         return run
 
-    @router.get("/analysis-runs/{run_id}/tracks")
+    @router.get(
+        "/analysis-runs/{run_id}/tracks",
+        response_model=AnalysisRunTracksResponse,
+        response_model_exclude_unset=True,
+    )
     def get_run_tracks(run_id: str):
         if service.get_analysis_run(run_id) is None:
             _raise_http(AnalysisNotFoundError("Analysis run was not found"))
@@ -197,6 +277,8 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
     @router.post(
         "/analysis-runs/{run_id}/cancel",
         status_code=status.HTTP_202_ACCEPTED,
+        response_model=AnalysisRunResponse,
+        response_model_exclude_unset=True,
     )
     def cancel_run(
         run_id: str, body: CancelAnalysisRunRequest = CancelAnalysisRunRequest()
@@ -212,6 +294,8 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
     @router.post(
         "/analysis-stages/{stage_id}/retry",
         status_code=status.HTTP_202_ACCEPTED,
+        response_model=AnalysisStageResponse,
+        response_model_exclude_unset=True,
     )
     def retry_stage(
         stage_id: str, body: RetryAnalysisStageRequest = RetryAnalysisStageRequest()
@@ -224,14 +308,22 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
             _raise_http(AnalysisNotFoundError("Analysis stage was not found"))
         return stage
 
-    @router.get("/tracks/{track_id}/analysis")
+    @router.get(
+        "/tracks/{track_id}/analysis",
+        response_model=TrackAnalysisResponse,
+        response_model_exclude_unset=True,
+    )
     def get_track_analysis(track_id: str, run_id: str | None = None):
         analysis = service.get_track_analysis(track_id, run_id=run_id)
         if analysis is None:
             _raise_http(AnalysisNotFoundError("Track analysis was not found"))
         return analysis
 
-    @router.get("/tracks/{track_id}/neighbors")
+    @router.get(
+        "/tracks/{track_id}/neighbors",
+        response_model=TrackNeighborsResponse,
+        response_model_exclude_unset=True,
+    )
     def get_track_neighbors(
         track_id: str,
         run_id: str | None = None,

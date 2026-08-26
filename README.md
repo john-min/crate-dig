@@ -2,14 +2,20 @@
 
 Find the next record.
 
-Crate Dig is a web-first, later Mac-desktop music intelligence app for DJs. It helps you import a library, analyze tracks, explore them on a map, and build crates around a set moment.
+Crate Dig is a web, localhost, and future Mac-desktop music intelligence app for DJs. It helps you import a library, analyze tracks, explore them on a map, and build crates around a set moment.
 
 This repository is documentation-led on `main`. Implementation lives on feature branches. Jeff’s original local prototype is kept as a review worktree and is **not** merged wholesale.
 
 ## Docs
 
 - [PRD](./PRD.md)
-- [Engine PRD](./CRATE_DIG_ENGINE_PRD.md)
+- [App platform architecture](./docs/APP_PLATFORM_ARCHITECTURE.md)
+- [Web app spec](./docs/WEB_APP_SPEC.md)
+- [Desktop app spec](./docs/DESKTOP_APP_SPEC.md)
+- [Localhost app spec](./LOCALHOST_APP_SPEC.md)
+- [Sonic analysis PRD](./sonic_analysis_prd.md)
+- [Implementation plan](./IMPLEMENTATION_PLAN.md)
+- [Residual engine PRD](./CRATE_DIG_ENGINE_PRD.md)
 - [Sonic analysis strategy](./sonic_analysis_engine.md)
 - [Design prompt](./design.md)
 - [Jeff branch review](./JEFF_BRANCH_REVIEW.md)
@@ -20,6 +26,10 @@ This repository is documentation-led on `main`. Implementation lives on feature 
 
 ```txt
 apps/web/          Next.js app (Vercel root directory)
+apps/local-api/    FastAPI + SQLite local API and worker
+packages/contracts Shared generated API/domain contracts
+packages/app-core  Platform-neutral application core
+packages/ui        Shared UI boundary (Studio move is deferred)
 packages/engine/   Python analysis engine (`cratedig_engine`)
 supabase/          migrations
 ```
@@ -29,9 +39,8 @@ The engine package name is `cratedig_engine` under `packages/engine`. Do not int
 ## Web app
 
 ```bash
-cd apps/web
-pnpm install   # npm install also works; see apps/web/README.md
-pnpm dev
+pnpm install
+pnpm --filter web dev
 ```
 
 Copy `apps/web/.env.example` to `apps/web/.env.local`. Use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, not `ANON_KEY`.
@@ -46,7 +55,7 @@ pip install -e ".[fast,dev]"
 pytest
 ```
 
-The implemented baseline uses a single librosa/CLAP/Essentia backend per run. The target engine keeps fast analysis lightweight, then completes asynchronous versioned stem and deep-feature stages. See the engine PRD for the migration contract; mandatory completed analysis does not mean import or playback waits for PyTorch.
+The implemented local runtime uses manifest-based analysis runs, versioned SQLite migrations, and a separate worker. `local-fast@1` currently selects the safe native librosa extractor; deeper manifests remain evaluation-gated. See `sonic_analysis_prd.md` and `IMPLEMENTATION_PLAN.md`.
 
 Cloud Run Job MVP:
 

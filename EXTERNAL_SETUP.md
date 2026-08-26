@@ -79,16 +79,16 @@ Collect:
 ```txt
 SUPABASE_PROJECT_REF=
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 SUPABASE_DB_PASSWORD=
 SUPABASE_DATABASE_URL=
 ```
 
 Notes:
 
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are safe to expose to the browser.
-- `SUPABASE_SERVICE_ROLE_KEY`, database password, and direct DB URLs are secrets.
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are safe to expose to the browser.
+- `SUPABASE_SECRET_KEY`, database password, and direct DB URLs are secrets.
 
 ### 3.3 Enable pgvector
 
@@ -338,7 +338,7 @@ Create secrets for:
 
 ```txt
 SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_SECRET_KEY
 R2_ACCOUNT_ID
 R2_ACCESS_KEY_ID
 R2_SECRET_ACCESS_KEY
@@ -349,13 +349,13 @@ R2_ENDPOINT
 Example:
 
 ```bash
-printf '%s' '<value>' | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
+printf '%s' '<value>' | gcloud secrets create SUPABASE_SECRET_KEY --data-file=-
 ```
 
 Grant the analysis service account access to needed secrets:
 
 ```bash
-gcloud secrets add-iam-policy-binding SUPABASE_SERVICE_ROLE_KEY \
+gcloud secrets add-iam-policy-binding SUPABASE_SECRET_KEY \
   --member="serviceAccount:crate-dig-analysis@<PROJECT_ID>.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
@@ -508,14 +508,16 @@ Public/browser-safe:
 
 ```txt
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_APP_MODE=cloud
+NEXT_PUBLIC_CLOUD_API_URL=
 NEXT_PUBLIC_SITE_URL=
 ```
 
 Server-only:
 
 ```txt
-SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_SECRET_KEY=
 CLOUD_RUN_ANALYSIS_JOB_NAME=
 GCP_PROJECT_ID=
 GCP_REGION=
@@ -565,8 +567,8 @@ After account setup, provide these values through a secure channel or local `.en
 # Supabase
 SUPABASE_PROJECT_REF=
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 SUPABASE_DATABASE_URL=
 
 # Google OAuth

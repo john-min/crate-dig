@@ -1,0 +1,6 @@
+packages:
+  - apps/web
+  - apps/desktop
+  - packages/contracts
+  - packages/app-core
+  - packages/ui

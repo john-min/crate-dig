@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const localSmoke = process.env.CRATE_DIG_LOCAL_SMOKE === "1";
+
 export default defineConfig({
   testDir: "./tests/visual",
   fullyParallel: false,
@@ -20,9 +22,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command:
-      "NEXT_PUBLIC_LOCAL_API_URL=http://127.0.0.1:65535 pnpm dev --hostname 127.0.0.1 --port 3000",
-    url: "http://localhost:3000/map?source=mock",
+    command: localSmoke
+      ? "NEXT_PUBLIC_APP_MODE=local NEXT_PUBLIC_LOCAL_API_URL=http://127.0.0.1:8000 pnpm dev --hostname 127.0.0.1 --port 3000"
+      : "NEXT_PUBLIC_APP_MODE=mock NEXT_PUBLIC_LOCAL_API_URL=http://127.0.0.1:65535 pnpm dev --hostname 127.0.0.1 --port 3000",
+    url: localSmoke ? "http://localhost:3000/map" : "http://localhost:3000/map?source=mock",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

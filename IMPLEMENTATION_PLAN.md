@@ -23,8 +23,10 @@ Use the documents in this order when decisions conflict:
 | Priority | Document | Authority |
 |---|---|---|
 | 1 | `PRD.md` | Product promise, users, surfaces, platform decisions, and full-product scope |
-| 2 | `sonic_analysis_prd.md` | Backend releases, functional requirements, SLOs, evaluation gates, and definition of done |
-| 3 | `CRATE_DIG_ENGINE_PRD.md` | Residual engine requirements that do not conflict with either canonical PRD |
+| 2 | `docs/APP_PLATFORM_ARCHITECTURE.md` | Platform runtimes, process boundaries, adapter ownership, and platform data/auth decisions |
+| 3 | `sonic_analysis_prd.md` | Backend releases, functional requirements, SLOs, evaluation gates, and definition of done |
+| 4 | `IMPLEMENTATION_PLAN.md` | Sequencing and verified implementation status |
+| 5 | `CRATE_DIG_ENGINE_PRD.md` | Residual engine requirements that do not conflict with canonical documents |
 
 `sonic_analysis_engine.md` is non-authoritative technical guidance. It may clarify implementation and research methodology, but it cannot override any PRD requirement.
 
@@ -75,6 +77,10 @@ Before implementation starts, build a requirement-by-requirement disposition tab
 - Cloud Run `analyze-run` job exists with injected Supabase and R2 adapters.
 - Rekordbox XML import and XML/M3U/CSV export exist.
 - Local FastAPI imports folders, lists tracks, and serves local audio with Range support.
+- Local FastAPI now also uses versioned v2 SQLite migrations, manifest-based durable
+  analysis runs, a separate worker, track analysis/neighbors, and evaluation APIs.
+- The repository has a pnpm workspace scaffold with generated local OpenAPI contracts and
+  platform-neutral contracts/app-core/UI package boundaries.
 - Existing test baseline passes:
   - engine: 33 tests
   - local API: 3 tests, with one Starlette/httpx deprecation warning
@@ -88,9 +94,12 @@ Before implementation starts, build a requirement-by-requirement disposition tab
 - Window-level evidence is pooled away.
 - Cache identity includes `track_id` and invalidates a whole backend at once.
 - UMAP/clustering is refit rather than using a frozen projection artifact.
-- Local SQLite only stores libraries and tracks.
-- Local API cannot create, run, inspect, cancel, or retry analysis jobs.
-- There is no evaluation-set or pair/triplet judgment persistence.
+- Local import still lacks decode-time `corrupt` outcomes and the full shared
+  retryability/remediation schema.
+- Long extractor invocations lack lease/progress heartbeats, and multi-extractor worker
+  claims do not yet share one decode.
+- The local API has no map, crate/export, generic similarity-search, or projection
+  coordinate routes yet.
 - Local UI tracks receive placeholder coordinates.
 - Frontend “similarity” is derived partly from 2D map position, BPM, key, and mock tags rather than backend sonic evidence.
 
@@ -854,7 +863,8 @@ Estimated size: 4–8 engineering weeks after Phases 6 and 8 establish stable de
 
 ### Work
 
-- Electron shell around the existing Next.js/React UI.
+- Electron Forge shell with a Vite/React renderer reusing platform-neutral UI/application
+  packages; do not embed the Next.js server runtime in the packaged renderer.
 - Bundle the Python local API/worker as a signed sidecar.
 - Package approved model manifests and manage optional model downloads.
 - Reuse SQLite schema and local audio paths.

@@ -1,0 +1,19 @@
+{
+  "name": "@crate-dig/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./generated/local-api": "./src/generated/local-api.ts"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../contracts/openapi/local-api.json -o src/generated/local-api.ts",
+    "test": "tsc --noEmit && node ../../scripts/check_platform_neutral.mjs packages/contracts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.9.1",
+    "typescript": "^5"
+  }
+}

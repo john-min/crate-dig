@@ -111,10 +111,9 @@ function QBody() {
     }
     return (
       <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">Q didn’t find a confident match.</p>
+        <p className="text-[12.5px] font-semibold leading-[18px]">Neighbor ranking is unavailable.</p>
         <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Blocked by {s.filterCount ? "active filters" : "the current seed and key window"}. Loosen
-          BPM, include adjacent keys, or search the whole library.
+          Q will not invent sonic matches. {s.filterCount ? "Active filters may also be hiding ranked neighbors. Loosen BPM, keys, or mood, or search the whole library." : "Ask for neighbors after analysis has materialized the librosa-zscore-v1 channel for this seed."}
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <QAction onClick={() => s.setFilters({ ...s.filters, bpmNearSeed: false })}>
@@ -134,10 +133,12 @@ function QBody() {
     return (
       <div>
         <p className="text-[12.5px] font-semibold leading-[18px]">
-          These {s.selectedIds.length} records share a dry, clipped kick and minor-key pressure.
+          {s.selectedIds.length} records selected.
         </p>
         <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Six form a peak-time run; three lean tougher and may work better afterhours.
+          {s.qCards.length
+            ? "Ranked from adapter neighbor evidence for the current seed."
+            : "Q needs neighbor ranking before it can describe how these records relate."}
         </p>
         <CardList />
       </div>
@@ -147,10 +148,12 @@ function QBody() {
   if (status === "crate" && s.activeCrate) {
     return (
       <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">Two gaps and one ending problem.</p>
+        <p className="text-[12.5px] font-semibold leading-[18px]">
+          “{s.activeCrate.name}” has {s.activeCrate.trackIds.length} tracks.
+        </p>
         <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          “{s.activeCrate.name}” dips at minute 22, clashes at track 9 → 10, and ends 2 BPM below your
-          handover target.
+          Q does not invent crate pacing, mix gaps, or ending problems. Select a seed with neighbor
+          ranking to ask for nearby records.
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <QAction onClick={() => s.askQ("Find a bridge record")}>Ask Q for a bridge</QAction>
@@ -161,22 +164,27 @@ function QBody() {
 
   if (status === "track" && (s.primarySelected || s.seed)) {
     const from = s.primarySelected ?? s.seed!;
+    const prototype = s.qCards.some((card) => card.nonSonic);
     return (
       <div>
         <p className="text-[12.5px] font-semibold leading-[18px]">
-          Q found {s.qCards.length || s.candidates.length} nearby records.
+          {s.qCards.length
+            ? `Q found ${s.qCards.length} ranked neighbors.`
+            : "Neighbor ranking is unavailable."}
         </p>
         <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Same low-mid movement, compatible keys, and warm percussion around “{from.title}”. Three are
-          safer blends; two are better pivots.
+          {prototype
+            ? `Layout neighbors around “${from.title}” — prototype map distance, not sonic analysis.`
+            : s.qCards.length
+              ? `Ranked from adapter neighbor evidence around “${from.title}”.`
+              : "Q will not invent sonic matches or fallback scores."}
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <QAction onClick={() => s.qCards[0] && s.play(s.qCards[0].trackId)}>Preview all</QAction>
-          <QAction onClick={() => s.qCards[0] && s.selectTrack(s.qCards[0].trackId)}>Reveal on map</QAction>
-          <QAction onClick={() => s.askQ("Find darker nearby")}>Find darker nearby</QAction>
-          <QAction onClick={() => s.askQ("Find safer blends")}>Find safer blends</QAction>
-          <QAction onClick={() => s.askQ("Find energy lift")}>Find energy lift</QAction>
-        </div>
+        {s.qCards.length ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <QAction onClick={() => s.qCards[0] && s.play(s.qCards[0].trackId)}>Preview all</QAction>
+            <QAction onClick={() => s.qCards[0] && s.selectTrack(s.qCards[0].trackId)}>Reveal on map</QAction>
+          </div>
+        ) : null}
         <CardList />
       </div>
     );
@@ -219,18 +227,15 @@ function QBody() {
 
 function CardList() {
   const s = useStudio();
-  const cards = s.qCards.length
-    ? s.qCards
-    : s.candidates.slice(0, 6).map((t) => ({
-        trackId: t.id,
-        title: t.title,
-        artist: t.artist,
-        score: s.scoreFor(t) ?? 0.8,
-        bpm: t.bpm,
-        key: t.key,
-        reason: "Nearby on the map, worth a preview.",
-        blend: "safer" as const,
-      }));
+  const cards = s.qCards;
+
+  if (!cards.length) {
+    return (
+      <p className="mt-4 text-[12px] leading-[19px] text-paper-dim">
+        No ranked neighbors to show. Q will not invent scores or sonic blend copy.
+      </p>
+    );
+  }
 
   return (
     <ul className="mt-4 flex flex-col gap-2">
@@ -239,8 +244,8 @@ function CardList() {
           <p className="text-[12.5px] font-medium text-paper">{card.title}</p>
           <p className="mt-0.5 text-[11px] text-paper-dim">{card.artist}</p>
           <p className="mt-1 tabular text-[11px] text-muted">
-            {formatScore(card.score)} match · {formatBpm(card.bpm)} BPM · {formatKey(card.key)} ·{" "}
-            {card.blend === "safer" ? "safer blend" : "pivot"}
+            {formatScore(card.score)} match · {formatBpm(card.bpm)} BPM · {formatKey(card.key)}
+            {card.nonSonic ? " · prototype layout" : ""}
           </p>
           <p className="mt-2 text-[11.5px] leading-[17px] text-paper-dim">{card.reason}</p>
           <div className="mt-3 flex flex-wrap gap-2">

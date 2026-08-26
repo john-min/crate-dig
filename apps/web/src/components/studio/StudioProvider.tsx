@@ -10,13 +10,22 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  activeFilterCount,
+  displaySimilarityReasons,
+  mapTrackToStudio,
+  matchesStudioFilters,
+  neighborIsNonSonic,
+  neighborReasonCopy,
+  orderTracksByNeighbors,
+} from "@crate-dig/app-core";
+import type {
+  CrateDigAdapter,
+  Neighbor,
+  ProjectionCapability,
+} from "@crate-dig/contracts";
+import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
 import { EMPTY_FILTERS, MODEL_VERSION } from "@/lib/studio/constants";
-import { formatKey, keysCompatible } from "@/lib/studio/format";
-import { activeFilterCount, matchesStudioFilters } from "@/lib/studio/filters";
-import { getMockLibrary } from "@/lib/studio/mock-library";
-import { diskTrackToStudio } from "@/lib/studio/from-local";
-import { fetchDiskLibrary, localApiHealth } from "@/lib/studio/local-api";
-import { nearbyTracks, reasonStack, similarityScore } from "@/lib/studio/similarity";
 import type {
   ColorBy,
   Crate,
@@ -86,13 +95,13 @@ type StudioContextValue = {
   undoHide: () => void;
   liveMessage: string;
   scoreFor: (track: StudioTrack) => number | null;
-  reasonsFor: (track: StudioTrack) => ReturnType<typeof reasonStack>;
+  reasonsFor: (track: StudioTrack) => ReturnType<typeof displaySimilarityReasons>;
   candidates: StudioTrack[];
   webglOk: boolean;
   setWebglOk: (value: boolean) => void;
   howToReadOpen: boolean;
   setHowToReadOpen: (value: boolean) => void;
-  librarySource: "mock" | "disk";
+  librarySource: "mock" | "disk" | "cloud";
   libraryName: string;
   libraryView: LibraryView;
   setLibraryView: (value: LibraryView) => void;
@@ -106,13 +115,27 @@ type StudioContextValue = {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
-export function StudioProvider({ children }: { children: ReactNode }) {
-  const mockLib = useMemo(() => getMockLibrary(), []);
-  const [diskTracks, setDiskTracks] = useState<StudioTrack[] | null>(null);
-  const [libraryName, setLibraryName] = useState("Demo library");
-  const usingDisk = Boolean(diskTracks && diskTracks.length > 0);
-  const allTracks = usingDisk ? diskTracks! : mockLib.tracks;
-  const initialCrates = mockLib.crates;
+export interface StudioProviderProps {
+  adapter: CrateDigAdapter;
+  children: ReactNode;
+  initialCrates?: Crate[];
+  librarySource: "mock" | "disk" | "cloud";
+  projection?: ProjectionCapability;
+}
+
+export function StudioProvider({
+  adapter,
+  children,
+  initialCrates = [],
+  librarySource,
+  projection,
+}: StudioProviderProps) {
+  const [allTracks, setAllTracks] = useState<StudioTrack[]>([]);
+  const [libraryName, setLibraryName] = useState("Library");
+  const [neighborState, setNeighborState] = useState<{
+    seedId: string;
+    items: readonly Neighbor[];
+  } | null>(null);
   const [filters, setFilters] = useState<StudioFilters>(EMPTY_FILTERS);
   const [colorBy, setColorBy] = useState<ColorBy>("mood");
   const [seedId, setSeedId] = useState<string | null>(null);
@@ -153,36 +176,31 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("source") === "mock") return;
     let cancelled = false;
-    (async () => {
-      const up = await localApiHealth();
-      if (!up || cancelled) return;
+    void (async () => {
       try {
-        const result = await fetchDiskLibrary();
-        if (cancelled || !result?.tracks.length) return;
-        setDiskTracks(result.tracks.map(diskTrackToStudio));
-        setLibraryName(result.library.name);
-        setCrates([
-          {
-            id: "local",
-            name: "Local crate",
-            trackIds: [],
-            intention: "Playing files from this machine",
-            room: "Local",
-            timeOfDay: "Now",
-          },
+        const [libraries, records, projectionFeed] = await Promise.all([
+          adapter.listLibraries(),
+          adapter.listTracks(),
+          projection?.getProjectionMapFeed().catch(() => undefined),
         ]);
-        setActiveCrateId("local");
-        announce(`Loaded ${result.tracks.length} tracks from ${result.library.name}.`);
-      } catch {
-        /* stay on mock library */
+        if (cancelled) return;
+        const points = new Map(
+          projectionFeed?.points.map((point) => [point.trackId, point]) ?? [],
+        );
+        setAllTracks(records.map((track) => mapTrackToStudio(track, points.get(track.id))));
+        setLibraryName(libraries[0]?.name ?? "Library");
+        announce(`Loaded ${records.length} tracks from ${libraries[0]?.name ?? "the library"}.`);
+      } catch (error) {
+        if (cancelled) return;
+        setAllTracks([]);
+        announce(error instanceof Error ? error.message : "The library could not be loaded.");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [announce]);
+  }, [adapter, announce, projection]);
 
   useEffect(() => {
     const el = new Audio();
@@ -206,10 +224,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const duration = el.duration;
       const id = playingIdRef.current;
       if (!id || !Number.isFinite(duration)) return;
-      setDiskTracks((prev) =>
+      setAllTracks((prev) =>
         prev
-          ? prev.map((track) => (track.id === id ? { ...track, durationSec: duration } : track))
-          : prev,
+          .map((track) => (track.id === id ? { ...track, durationSec: duration } : track)),
       );
     };
     el.addEventListener("timeupdate", onTime);
@@ -267,31 +284,55 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [recentCutoff, tracks],
   );
   const unplayedCount = tracks.length - playedIds.size;
-  const analysisReady = tracks.some((track) => track.analysisStatus === "ok" && track.bpm != null);
+  const analysisReady = tracks.some((track) => track.analysisStatus === "ok");
 
   const filterCount = activeFilterCount(filters);
 
+  useEffect(() => {
+    if (!seedId) return;
+    let cancelled = false;
+    void adapter
+      .getTrackNeighbors(seedId, { limit: 80, channel: LOCAL_ANALYSIS_NEIGHBOR_CHANNEL })
+      .then((items) => {
+        if (!cancelled) setNeighborState({ seedId, items });
+      })
+      .catch(() => {
+        if (!cancelled) setNeighborState({ seedId, items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [adapter, seedId]);
+
+  const neighbors = useMemo(
+    () => (neighborState?.seedId === seedId ? neighborState.items : []),
+    [neighborState, seedId],
+  );
+
+  const neighborScores = useMemo(
+    () => new Map(neighbors.map((neighbor) => [neighbor.trackId, neighbor.score])),
+    [neighbors],
+  );
+
   const scoreFor = useCallback(
     (track: StudioTrack) =>
-      analysisReady && seed && track.id !== seed.id ? similarityScore(seed, track) : null,
-    [analysisReady, seed],
+      analysisReady && seed && track.id !== seed.id ? (neighborScores.get(track.id) ?? null) : null,
+    [analysisReady, neighborScores, seed],
   );
 
   const reasonsFor = useCallback(
-    (track: StudioTrack) => {
-      if (!seed) return [];
-      return reasonStack(seed, track, similarityScore(seed, track));
-    },
-    [seed],
+    (track: StudioTrack) =>
+      displaySimilarityReasons(neighbors.find((neighbor) => neighbor.trackId === track.id) ?? null),
+    [neighbors],
   );
 
   const candidates = useMemo(() => {
     const pool = visible.filter((t) => t.analysisStatus !== "failed");
     if (seed) {
-      return nearbyTracks(seed, pool, 80);
+      return orderTracksByNeighbors(pool, neighbors);
     }
     return [...pool].sort((a, b) => a.cluster - b.cluster || a.title.localeCompare(b.title));
-  }, [visible, seed]);
+  }, [neighbors, visible, seed]);
 
   const activeCrate = crates.find((c) => c.id === activeCrateId) ?? null;
 
@@ -367,7 +408,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       stopTimer();
       const el = audioRef.current;
       const resume = Boolean(
-        el && playingId === track.id && playStatus === "paused" && track.previewUrl && el.src,
+        el && playingId === track.id && playStatus === "paused" && el.src,
       );
       if (!resume) {
         setPlayingId(track.id);
@@ -376,11 +417,6 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           el.pause();
           el.removeAttribute("src");
         }
-      }
-      if (track.previewState === "missing") {
-        setPlayStatus("failed");
-        announce(`${track.title} is missing locally. Playback unchanged on disk.`);
-        return;
       }
       if (track.previewState === "expired" || track.previewState === "failed") {
         setPlayStatus("failed");
@@ -391,11 +427,35 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         );
         return;
       }
-      if (track.previewUrl && el) {
+
+      const startSimulatedPlayback = () => {
+        setPlayStatus("loading");
+        announce(`Loading ${track.title}`);
+        window.setTimeout(() => {
+          setPlayStatus("playing");
+          announce(`Playing ${track.title}`);
+          playTimer.current = window.setInterval(() => {
+            setPlayheadSec((sec) => {
+              if (sec + 0.25 >= track.durationSec) {
+                stopTimer();
+                setPlayStatus("paused");
+                return track.durationSec;
+              }
+              return sec + 0.25;
+            });
+          }, 250);
+        }, 280);
+      };
+
+      const startUrlPlayback = (url: string) => {
+        if (!el) {
+          startSimulatedPlayback();
+          return;
+        }
         setPlayStatus("loading");
         announce(`Loading ${track.title}`);
         if (!resume) {
-          el.src = track.previewUrl;
+          el.src = url;
         }
         void el.play().then(
           () => announce(`Playing ${track.title}`),
@@ -404,26 +464,40 @@ export function StudioProvider({ children }: { children: ReactNode }) {
             announce(`Could not play ${track.title}.`);
           },
         );
+      };
+
+      if (resume && el?.src) {
+        startUrlPlayback(el.src);
         return;
       }
-      setPlayStatus("loading");
-      announce(`Loading ${track.title}`);
-      window.setTimeout(() => {
-        setPlayStatus("playing");
-        announce(`Playing ${track.title}`);
-        playTimer.current = window.setInterval(() => {
-          setPlayheadSec((sec) => {
-            if (sec + 0.25 >= track.durationSec) {
-              stopTimer();
-              setPlayStatus("paused");
-              return track.durationSec;
-            }
-            return sec + 0.25;
-          });
-        }, 250);
-      }, 280);
+
+      void (async () => {
+        try {
+          const playback = await adapter.getPlaybackUrl(track.id);
+          if (playback.url) {
+            startUrlPlayback(playback.url);
+            return;
+          }
+        } catch (error) {
+          if (adapter.runtime === "cloud") {
+            setPlayStatus("failed");
+            announce(error instanceof Error ? error.message : `Could not play ${track.title}.`);
+            return;
+          }
+        }
+        if (track.previewUrl) {
+          startUrlPlayback(track.previewUrl);
+          return;
+        }
+        if (track.previewState === "missing") {
+          setPlayStatus("failed");
+          announce(`${track.title} has no playable preview URL.`);
+          return;
+        }
+        startSimulatedPlayback();
+      })();
     },
-    [announce, playStatus, playingId, selectedIds, tracks],
+    [adapter, announce, playStatus, playingId, selectedIds, tracks],
   );
 
   const pause = useCallback(() => {
@@ -445,26 +519,39 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const buildQCards = useCallback(
-    (from: StudioTrack, pool: StudioTrack[]): QCard[] => {
-      return nearbyTracks(from, pool, 8).map((t, i) => {
-        const score = similarityScore(from, t);
-        const compatible = keysCompatible(from.key, t.key);
-        return {
-          trackId: t.id,
-          title: t.title,
-          artist: t.artist,
-          score,
-          bpm: t.bpm,
-          key: t.key,
-          blend: i < 3 || compatible ? "safer" : "pivot",
-          reason:
-            i < 3
-              ? `Same rolling percussion and darker room tone. Safer than it looks: ${formatKey(from.key)} → ${formatKey(t.key)} works cleanly.`
-              : `Shares ${t.mood} mood with a ${t.energy} lift. Preview before it goes in the crate.`,
-        };
-      });
+    (from: StudioTrack, pool: StudioTrack[], ranking: readonly Neighbor[]): QCard[] => {
+      const ranked = orderTracksByNeighbors(
+        pool.filter((track) => track.id !== from.id),
+        ranking,
+      );
+      const byId = new Map(ranking.map((item) => [item.trackId, item]));
+      return ranked.flatMap((track) => {
+        const neighbor = byId.get(track.id);
+        if (!neighbor) return [];
+        return [
+          {
+            trackId: track.id,
+            title: track.title,
+            artist: track.artist,
+            score: neighbor.score,
+            bpm: track.bpm,
+            key: track.key,
+            reason: neighborReasonCopy(neighbor),
+            nonSonic: neighborIsNonSonic(neighbor),
+          },
+        ];
+      }).slice(0, 8);
     },
     [],
+  );
+
+  const requestNeighbors = useCallback(
+    (trackId: string) =>
+      adapter.getTrackNeighbors(trackId, {
+        limit: 80,
+        channel: LOCAL_ANALYSIS_NEIGHBOR_CHANNEL,
+      }),
+    [adapter],
   );
 
   const askQ = useCallback(
@@ -493,31 +580,72 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           announce("Q didn’t find a confident match.");
           return;
         }
-        const cards = buildQCards(from, visible);
-        if (!cards.length) {
-          setQRequest("no-results");
-          announce("Q didn’t find a confident match.");
-        } else {
-          setQRequest("idle");
-          setQCards(cards);
-          announce(
-            selectedIds.length > 1
-              ? `Q grouped ${selectedIds.length} selected records.`
-              : `Q found ${cards.length} nearby records.`,
-          );
-        }
+        void requestNeighbors(from.id)
+          .then((items) => {
+            const cards = buildQCards(from, visible, items);
+            if (!items.length || !cards.length) {
+              setQRequest("no-results");
+              setQCards([]);
+              announce(
+                items.length
+                  ? "Q didn’t find a confident match."
+                  : "Neighbor ranking is unavailable. Q will not invent sonic matches.",
+              );
+            } else {
+              setQRequest("idle");
+              setQCards(cards);
+              announce(
+                selectedIds.length > 1
+                  ? `Q grouped ${selectedIds.length} selected records.`
+                  : `Q found ${cards.length} nearby records.`,
+              );
+            }
+          })
+          .catch(() => {
+            setQRequest("failure");
+            setQCards([]);
+            announce("Q couldn’t finish that search. Your library and crate are unchanged.");
+          });
       }, 700);
     },
-    [analysisReady, announce, buildQCards, primarySelected, qPrompt, seed, selectedIds.length, visible],
+    [
+      analysisReady,
+      announce,
+      buildQCards,
+      primarySelected,
+      qPrompt,
+      requestNeighbors,
+      seed,
+      selectedIds.length,
+      visible,
+    ],
   );
 
   const openQ = useCallback(() => {
     setQOpen(true);
-    setQRequest("idle");
     const from = primarySelected ?? seed;
-    if (from && analysisReady) setQCards(buildQCards(from, visible));
-    else setQCards([]);
-  }, [analysisReady, buildQCards, primarySelected, seed, visible]);
+    if (!analysisReady) {
+      setQRequest("no-results");
+      setQCards([]);
+      return;
+    }
+    if (!from) {
+      setQRequest("idle");
+      setQCards([]);
+      return;
+    }
+    setQRequest("loading");
+    void requestNeighbors(from.id)
+      .then((items) => {
+        const cards = buildQCards(from, visible, items);
+        setQCards(cards);
+        setQRequest(cards.length ? "idle" : "no-results");
+      })
+      .catch(() => {
+        setQCards([]);
+        setQRequest("failure");
+      });
+  }, [analysisReady, buildQCards, primarySelected, requestNeighbors, seed, visible]);
 
   const closeQ = useCallback(() => setQOpen(false), []);
   const toggleQ = useCallback(() => {
@@ -669,7 +797,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     setWebglOk,
     howToReadOpen,
     setHowToReadOpen,
-    librarySource: usingDisk ? "disk" : "mock",
+    librarySource,
     libraryName,
     libraryView,
     setLibraryView,

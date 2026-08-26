@@ -6,7 +6,7 @@ import sqlite3
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue
 
 from cratedig_local_api.evaluation_service import DIMENSIONS, EvaluationService
 from cratedig_local_api.repository import ConflictError, NotFoundError
@@ -113,6 +113,105 @@ class SaveMetricsRequest(StrictModel):
     metrics: list[MetricInput] = Field(min_length=1)
 
 
+class ExtensibleResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class EvaluationSetResponse(ExtensibleResponse):
+    contract_version: Literal["evaluation.v1"]
+    id: str
+    library_id: str
+    name: str
+    version: str
+    hidden_metadata: bool
+    anchor_count: int | None = None
+    track_count: int | None = None
+    configuration_count: int | None = None
+    configurations: list[dict[str, JsonValue]] = Field(default_factory=list)
+
+
+class EvaluationSetListResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_sets: list[EvaluationSetResponse]
+
+
+class EvaluationSetDetailResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_set: EvaluationSetResponse
+    tracks: list[dict[str, JsonValue]]
+    anchors: list[dict[str, JsonValue]]
+    configurations: list[dict[str, JsonValue]]
+    latest_run: dict[str, JsonValue] | None
+
+
+class EvaluationRunResponse(ExtensibleResponse):
+    contract_version: Literal["evaluation.v1"]
+    id: str
+    evaluation_set_id: str
+    evaluation_set_version: str
+    status: str
+    requested_k: int
+    configuration_ids: list[str]
+
+
+class EvaluationRoundResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_set_id: str
+    evaluation_set_version: str
+    evaluation_run_id: str
+    blind: bool
+    anchor: dict[str, JsonValue]
+    configurations: list[dict[str, JsonValue]]
+    rankings: list[dict[str, JsonValue]]
+
+
+class EvaluationNeighborsResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_set_id: str
+    evaluation_run_id: str
+    anchor_track_id: str
+    configurations: list[dict[str, JsonValue]]
+
+
+class JudgmentResponse(ExtensibleResponse):
+    contract_version: Literal["evaluation.v1"]
+    id: str
+    evaluation_set_id: str
+    evaluation_run_id: str | None
+    evaluator_id: str
+    judgment_type: JudgmentType
+    dimension: str
+    anchor_track_id: str
+    candidate_a_track_id: str
+    decision: Decision
+    blind: bool
+
+
+class MetricResponse(BaseModel):
+    metric_name: str
+    dimension: str
+    k: int | None
+    value: float | None
+    sample_count: int
+    details: dict[str, JsonValue]
+    computed_at: str
+
+
+class MetricsResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_run_id: str
+    metrics: list[MetricResponse]
+
+
+class EvaluationReportResponse(BaseModel):
+    contract_version: Literal["evaluation.v1"]
+    evaluation_set_id: str
+    evaluation_set_version: str
+    evaluation_run_id: str | None
+    configurations: list[dict[str, JsonValue]]
+    comparisons: list[dict[str, JsonValue]]
+
+
 def _configuration_ids(values: list[str]) -> list[str]:
     """Accept repeated query params as well as one comma-separated value."""
 
@@ -141,21 +240,34 @@ def _raise_service_error(exc: Exception) -> None:
 def create_evaluation_router(service: EvaluationService) -> APIRouter:
     router = APIRouter(tags=["similarity-evaluation"])
 
-    @router.get("/evaluation-sets")
+    @router.get(
+        "/evaluation-sets",
+        response_model=EvaluationSetListResponse,
+        response_model_exclude_unset=True,
+    )
     def list_sets(library_id: str | None = None):
         return {
             "contract_version": "evaluation.v1",
             "evaluation_sets": service.list_evaluation_sets(library_id=library_id),
         }
 
-    @router.post("/evaluation-sets", status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "/evaluation-sets",
+        status_code=status.HTTP_201_CREATED,
+        response_model=EvaluationSetResponse,
+        response_model_exclude_unset=True,
+    )
     def create_set(body: CreateEvaluationSetRequest):
         try:
             return service.create_evaluation_set(body.model_dump(mode="json"))
         except (ValueError, NotFoundError, ConflictError) as exc:
             _raise_service_error(exc)
 
-    @router.get("/evaluation-sets/{evaluation_set_id}")
+    @router.get(
+        "/evaluation-sets/{evaluation_set_id}",
+        response_model=EvaluationSetDetailResponse,
+        response_model_exclude_unset=True,
+    )
     def get_set(evaluation_set_id: str):
         result = service.get_evaluation_set(evaluation_set_id)
         if result is None:
@@ -176,6 +288,8 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
     @router.post(
         "/evaluation-sets/{evaluation_set_id}/runs",
         status_code=status.HTTP_201_CREATED,
+        response_model=EvaluationRunResponse,
+        response_model_exclude_unset=True,
     )
     def create_run(evaluation_set_id: str, body: CreateEvaluationRunRequest):
         try:
@@ -188,7 +302,11 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
         except (ValueError, NotFoundError, ConflictError) as exc:
             _raise_service_error(exc)
 
-    @router.get("/evaluation-sets/{evaluation_set_id}/next")
+    @router.get(
+        "/evaluation-sets/{evaluation_set_id}/next",
+        response_model=EvaluationRoundResponse,
+        response_model_exclude_unset=True,
+    )
     def get_next(
         evaluation_set_id: str,
         evaluator_id: str = "local",
@@ -218,7 +336,11 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
             )
         return result
 
-    @router.get("/evaluation-sets/{evaluation_set_id}/anchors/{anchor_track_id}/neighbors")
+    @router.get(
+        "/evaluation-sets/{evaluation_set_id}/anchors/{anchor_track_id}/neighbors",
+        response_model=EvaluationNeighborsResponse,
+        response_model_exclude_unset=True,
+    )
     def get_neighbors(
         evaluation_set_id: str,
         anchor_track_id: str,
@@ -236,6 +358,8 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
     @router.post(
         "/evaluation-sets/{evaluation_set_id}/judgments",
         status_code=status.HTTP_201_CREATED,
+        response_model=JudgmentResponse,
+        response_model_exclude_unset=True,
     )
     def create_judgment(
         evaluation_set_id: str,
@@ -257,7 +381,11 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
         except (ValueError, NotFoundError, ConflictError) as exc:
             _raise_service_error(exc)
 
-    @router.post("/evaluation-sets/{evaluation_set_id}/runs/{evaluation_run_id}/metrics")
+    @router.post(
+        "/evaluation-sets/{evaluation_set_id}/runs/{evaluation_run_id}/metrics",
+        response_model=MetricsResponse,
+        response_model_exclude_unset=True,
+    )
     def save_metrics(
         evaluation_set_id: str,
         evaluation_run_id: str,
@@ -277,7 +405,11 @@ def create_evaluation_router(service: EvaluationService) -> APIRouter:
             "metrics": metrics,
         }
 
-    @router.get("/evaluation-sets/{evaluation_set_id}/report")
+    @router.get(
+        "/evaluation-sets/{evaluation_set_id}/report",
+        response_model=EvaluationReportResponse,
+        response_model_exclude_unset=True,
+    )
     def report(evaluation_set_id: str):
         try:
             return service.report(evaluation_set_id)

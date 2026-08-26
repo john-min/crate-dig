@@ -1,3 +1,15 @@
+export type PublicAppMode = "mock" | "local" | "cloud";
+
+export function getPublicAppMode(): PublicAppMode | undefined {
+  const value = process.env.NEXT_PUBLIC_APP_MODE;
+  if (value === "mock" || value === "local" || value === "cloud") return value;
+  return undefined;
+}
+
+export function isCloudAppMode(): boolean {
+  return getPublicAppMode() === "cloud";
+}
+
 export function getSupabasePublishableEnv(): { url: string; key: string } | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;

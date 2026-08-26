@@ -7,10 +7,10 @@ import { NoResults } from "./NoResults";
 import { MapFallbackList } from "./MapFallbackList";
 import { useStudio } from "./StudioProvider";
 import { docksQ, useBreakpoint } from "@/lib/studio/use-breakpoint";
-import { similarityScore } from "@/lib/studio/similarity";
 import type { StudioTrack } from "@/lib/studio/types";
 
-function centroidScores(tracks: StudioTrack[]): Record<string, number> {
+/** Display-only color gradient; not a recommendation or sonic similarity score. */
+function prototypeCentroidDisplayScores(tracks: StudioTrack[]): Record<string, number> {
   const n = tracks.length;
   if (!n) return {};
   let cx = 0;
@@ -32,19 +32,21 @@ function centroidScores(tracks: StudioTrack[]): Record<string, number> {
 
 export function StudioMap() {
   const s = useStudio();
+  const { analysisReady, seed, visible, scoreFor } = s;
   const bp = useBreakpoint();
   const [fitRequestKey, setFitRequestKey] = useState(0);
-  const visibleIds = useMemo(() => new Set(s.visible.map((t) => t.id)), [s.visible]);
+  const visibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible]);
   const scores = useMemo(() => {
-    if (!s.analysisReady) return {};
-    const origin = s.seed ?? s.primarySelected;
-    if (!origin) return centroidScores(s.visible);
+    if (!analysisReady) return {};
+    if (!seed) return prototypeCentroidDisplayScores(visible);
     const out: Record<string, number> = {};
-    for (const track of s.visible) {
-      out[track.id] = track.id === origin.id ? 1 : similarityScore(origin, track);
+    for (const track of visible) {
+      const score = scoreFor(track);
+      if (score != null) out[track.id] = score;
+      else if (track.id === seed.id) out[track.id] = 1;
     }
     return out;
-  }, [s.analysisReady, s.seed, s.primarySelected, s.visible]);
+  }, [analysisReady, scoreFor, seed, visible]);
 
   if (!s.webglOk) return <MapFallbackList />;
   if (s.visible.length === 0) return <NoResults />;

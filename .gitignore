@@ -48,6 +48,7 @@ htmlcov/
 
 # Node / Next.js
 node_modules/
+.pnpm-store/
 .next/
 out/
 
@@ -55,6 +56,10 @@ out/
 .DS_Store
 .idea/
 .vscode/
+
+# Electron Forge
+apps/desktop/.vite/
+apps/desktop/out/
 
 # Supabase local runtime
 supabase/.temp/

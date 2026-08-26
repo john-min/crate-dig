@@ -1,11 +1,14 @@
 # Cursor Engineering Handoff
 
-Status: Foundation implemented; engine refactor ready for planning
+Status: Engine/local-analysis foundation implemented; app platform scaffolding in progress
 Last updated: 2026-08-25
 Primary product docs:
 
 - [PRD.md](./PRD.md)
-- [CRATE_DIG_ENGINE_PRD.md](./CRATE_DIG_ENGINE_PRD.md)
+- [docs/APP_PLATFORM_ARCHITECTURE.md](./docs/APP_PLATFORM_ARCHITECTURE.md)
+- [sonic_analysis_prd.md](./sonic_analysis_prd.md)
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
+- [CRATE_DIG_ENGINE_PRD.md](./CRATE_DIG_ENGINE_PRD.md) (residual/superseded on conflict)
 - [sonic_analysis_engine.md](./sonic_analysis_engine.md)
 - [design.md](./design.md)
 - [JEFF_BRANCH_REVIEW.md](./JEFF_BRANCH_REVIEW.md)
@@ -69,7 +72,13 @@ Do not re-litigate these unless new evidence appears.
 - Audio/artifact storage: Cloudflare R2.
 - Web demo playback: full-track playback from private R2-hosted audio using signed/access-controlled URLs.
 - Map visualization: Deck.gl with `OrthographicView`.
-- Desktop app: Mac app later, likely Electron + React/TypeScript + Python sidecar + SQLite.
+- Desktop app: Electron Forge + Vite/React renderer, secure preload, supervised Python FastAPI/worker sidecars, and SQLite.
+
+The current localhost implementation is no longer a proposal: FastAPI has versioned v2
+SQLite migrations, manifest-based analysis runs, a separate worker, track analysis and
+neighbors, and similarity-evaluation routes. The generated OpenAPI contract is
+`contracts/openapi/local-api.json`. See `LOCALHOST_APP_SPEC.md`; do not infer nonexistent
+map, crate, generic similarity, or export routes from older sketches.
 
 ## 4. What to keep from Jeff branch
 
@@ -122,10 +131,18 @@ Proposed near-term structure:
 
 ```txt
 apps/
+  local-api/
+    FastAPI + SQLite + worker
   web/
     Next.js app
 
 packages/
+  contracts/
+    generated OpenAPI and stable domain contracts
+  app-core/
+    platform-neutral application logic
+  ui/
+    shared UI boundary
   engine/
     pyproject.toml
     cratedig_engine/

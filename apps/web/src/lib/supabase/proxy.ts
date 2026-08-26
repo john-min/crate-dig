@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { getSupabasePublishableEnv } from "@/lib/env";
+import { getSupabasePublishableEnv, isCloudAppMode } from "@/lib/env";
 
 const PROTECTED_PREFIXES = ["/app", "/import", "/analysis"];
 
@@ -13,7 +13,17 @@ function isProtectedPath(pathname: string): boolean {
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const env = getSupabasePublishableEnv();
-  if (!env) return supabaseResponse;
+  const protectStudio = isCloudAppMode() && isProtectedPath(request.nextUrl.pathname);
+
+  if (!env) {
+    if (protectStudio) {
+      const login = request.nextUrl.clone();
+      login.pathname = "/login";
+      login.searchParams.set("next", request.nextUrl.pathname);
+      return NextResponse.redirect(login);
+    }
+    return supabaseResponse;
+  }
 
   const supabase = createServerClient(env.url, env.key, {
     cookies: {
@@ -32,7 +42,7 @@ export async function updateSession(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
 
-  if (isProtectedPath(request.nextUrl.pathname) && !data?.claims) {
+  if (protectStudio && !data?.claims) {
     const login = request.nextUrl.clone();
     login.pathname = "/login";
     login.searchParams.set("next", request.nextUrl.pathname);

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { UploadDropzone } from "@/components/import/UploadDropzone";
-import { LocalFolderImport } from "@/components/import/LocalFolderImport";
+import { ImportRuntime } from "@/components/import/ImportRuntime";
 
 export const metadata: Metadata = { title: "Import" };
 
@@ -21,14 +20,11 @@ export default function ImportPage() {
           Bring the records in
         </h1>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-paper-dim">
-          On this Mac, play from the file path on disk. The hosted demo still
-          uses private uploads; Rekordbox XML is next.
+          Local mode indexes files in place. Cloud mode uses signed private uploads;
+          Rekordbox XML is next.
         </p>
         <div className="mt-10">
-          <LocalFolderImport />
-        </div>
-        <div className="mt-10">
-          <UploadDropzone />
+          <ImportRuntime />
         </div>
         <div className="mt-10">
           <Link

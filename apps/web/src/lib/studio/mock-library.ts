@@ -78,6 +78,7 @@ function enrich(raw: Raw): StudioTrack {
 
   const track: StudioTrack = {
     id: raw.id,
+    libraryId: "mock-library",
     title: raw.title,
     artist: raw.artist,
     bpm: raw.bpm,

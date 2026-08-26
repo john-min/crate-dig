@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from cratedig_engine.audio import hash_audio_file
 
@@ -38,6 +39,86 @@ class CsvMetadataImportBody(BaseModel):
     source_ref: str | None = None
 
 
+class HealthResponse(BaseModel):
+    ok: bool
+    host: str
+    ffmpeg: bool
+    home: str
+
+
+class LibraryResponse(BaseModel):
+    id: str
+    name: str
+    source: str
+    created_at: str
+    updated_at: str
+
+
+class LibrariesResponse(BaseModel):
+    libraries: list[LibraryResponse]
+
+
+class TrackResponse(BaseModel):
+    id: str
+    library_id: str
+    title: str
+    artist: str
+    album: str
+    genre: str
+    label: str
+    bpm: float | None
+    key: str | None
+    duration_sec: float | None
+    location: str
+    location_kind: str
+    audio_content_hash: str | None
+    rating: int | None
+    date_added: str
+    rekordbox_track_id: str | None
+    bpm_source: str | None
+    key_source: str | None
+    created_at: str
+    missing: bool
+    preview_url: str | None
+
+
+class TracksResponse(BaseModel):
+    tracks: list[TrackResponse]
+
+
+class FolderImportOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    status: Literal["imported", "duplicate", "unsupported", "failed"]
+    reason: str | None = None
+    track_id: str | None = None
+    duplicate_of_track_id: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class FolderImportResponse(BaseModel):
+    library_id: str
+    scanned: int
+    examined: int
+    tracks: int
+    outcomes: list[FolderImportOutcome]
+
+
+class CsvMetadataImportResponse(BaseModel):
+    source_ref: str
+    csv_rows: int
+    library_tracks: int
+    matched: int
+    unmatched: int
+    ambiguous: int
+    source_records_written: int
+    tracks_enriched: int
+    fields_enriched: int
+    bpm_conflicts: int
+    key_conflicts: int
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     conn = db.connect(settings.sqlite_path)
@@ -57,7 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(create_analysis_router(RepositoryAnalysisService(repository)))
     app.include_router(create_evaluation_router(EvaluationService(repository)))
 
-    @app.get("/health")
+    @app.get("/health", response_model=HealthResponse)
     def health():
         return {
             "ok": True,
@@ -66,12 +147,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "home": str(settings.home),
         }
 
-    @app.get("/libraries")
+    @app.get("/libraries", response_model=LibrariesResponse)
     def libraries():
         with repository.synchronized():
             return {"libraries": db.list_libraries(conn)}
 
-    @app.post("/imports/folder")
+    @app.post(
+        "/imports/folder",
+        response_model=FolderImportResponse,
+        response_model_exclude_unset=True,
+    )
     def import_folder(body: FolderImportBody):
         folder = Path(body.folder_path).expanduser()
         try:
@@ -159,7 +244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "outcomes": outcomes,
         }
 
-    @app.get("/libraries/{library_id}/tracks")
+    @app.get("/libraries/{library_id}/tracks", response_model=TracksResponse)
     def library_tracks(library_id: str):
         with repository.synchronized():
             libs = {row["id"] for row in db.list_libraries(conn)}
@@ -168,7 +253,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             tracks = db.list_tracks(conn, library_id)
         return {"tracks": [_public_track(row) for row in tracks]}
 
-    @app.post("/libraries/{library_id}/metadata/import-csv")
+    @app.post(
+        "/libraries/{library_id}/metadata/import-csv",
+        response_model=CsvMetadataImportResponse,
+    )
     def import_csv_metadata(library_id: str, body: CsvMetadataImportBody):
         source = Path(body.csv_path).expanduser()
         if not source.is_file():
@@ -187,13 +275,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return summary.as_dict()
 
-    @app.get("/tracks")
+    @app.get("/tracks", response_model=TracksResponse)
     def all_tracks():
         with repository.synchronized():
             tracks = db.list_tracks(conn)
         return {"tracks": [_public_track(row) for row in tracks]}
 
-    @app.get("/tracks/{track_id}")
+    @app.get("/tracks/{track_id}", response_model=TrackResponse)
     def one_track(track_id: str):
         with repository.synchronized():
             row = db.get_track(conn, track_id)
@@ -201,7 +289,63 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Track not found")
         return _public_track(row)
 
-    @app.get("/audio/{track_id}")
+    @app.get(
+        "/audio/{track_id}",
+        response_class=Response,
+        responses={
+            200: {
+                "description": "Stored local audio with HTTP Range support",
+                "headers": {
+                    "Accept-Ranges": {
+                        "description": "Supported range unit",
+                        "schema": {"type": "string", "const": "bytes"},
+                    },
+                    "Content-Length": {
+                        "description": "Response body length in bytes",
+                        "schema": {"type": "string"},
+                    },
+                    "Content-Type": {
+                        "description": "Detected audio media type",
+                        "schema": {"type": "string"},
+                    },
+                },
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            },
+            206: {
+                "description": "Requested byte range of stored local audio",
+                "headers": {
+                    "Accept-Ranges": {
+                        "description": "Supported range unit",
+                        "schema": {"type": "string", "const": "bytes"},
+                    },
+                    "Content-Length": {
+                        "description": "Partial response body length in bytes",
+                        "schema": {"type": "string"},
+                    },
+                    "Content-Range": {
+                        "description": "Returned byte range and complete file size",
+                        "schema": {
+                            "type": "string",
+                            "example": "bytes 0-31/1600",
+                        },
+                    },
+                    "Content-Type": {
+                        "description": "Detected audio media type",
+                        "schema": {"type": "string"},
+                    },
+                },
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            },
+        },
+    )
     def audio(track_id: str, request: Request):
         with repository.synchronized():
             row = db.get_track(conn, track_id)

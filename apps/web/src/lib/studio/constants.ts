@@ -1,6 +1,7 @@
+import { BPM_BOUNDS } from "@crate-dig/app-core";
 import type { Energy, Mood, Texture } from "./types";
 
-export const BPM_BOUNDS = { min: 108, max: 136 } as const;
+export { BPM_BOUNDS };
 export const MODEL_VERSION = "fast-librosa · pipeline 2026.08";
 export const LIBRARY_TOTAL = 3000;
 

@@ -2,6 +2,8 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { parseAccessCodeRpc } from "@/lib/auth/access-code-rpc";
 
 export const ACCESS_CODE_COOKIE = "cd_access_code";
 
@@ -21,23 +23,22 @@ export async function lookupValidAccessCode(
   const trimmed = code.trim();
   if (!trimmed) return { ok: false, error: "Enter an access code." };
 
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("access_codes")
-    .select("id, code, max_redemptions, redemption_count, expires_at")
-    .eq("code", trimmed)
-    .maybeSingle();
-
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("validate_access_code", { p_code: trimmed });
   if (error) return { ok: false, error: "Could not validate that code." };
-  if (!data) return { ok: false, error: "That code is not valid." };
-  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
-    return { ok: false, error: "That code has expired." };
-  }
-  if (data.redemption_count >= data.max_redemptions) {
-    return { ok: false, error: "That code has already been used." };
-  }
 
-  return { ok: true, row: data as AccessCodeRow };
+  const result = parseAccessCodeRpc(data, "Could not validate that code.");
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    row: {
+      id: result.id ?? "validated",
+      code: result.code ?? trimmed,
+      max_redemptions: 1,
+      redemption_count: 0,
+      expires_at: null,
+    },
+  };
 }
 
 export async function setAccessCodeCookie(code: string) {
@@ -65,37 +66,22 @@ export async function redeemAccessCodeForUser(
   userId: string,
   code: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = createAdminClient();
+  const trimmed = code.trim();
+  if (!trimmed) return { ok: false, error: "Enter an access code." };
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("access_code_id")
-    .eq("id", userId)
-    .maybeSingle();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (profile?.access_code_id) return { ok: true };
+  const invoke =
+    user?.id === userId
+      ? supabase.rpc("redeem_access_code", { p_code: trimmed, p_user_id: userId })
+      : createAdminClient().rpc("redeem_access_code", { p_code: trimmed, p_user_id: userId });
 
-  const looked = await lookupValidAccessCode(code);
-  if (!looked.ok) return looked;
-
-  const { error: updateError } = await admin
-    .from("access_codes")
-    .update({ redemption_count: looked.row.redemption_count + 1 })
-    .eq("id", looked.row.id)
-    .eq("redemption_count", looked.row.redemption_count);
-
-  if (updateError) {
-    return { ok: false, error: "Could not redeem that code. Try again." };
-  }
-
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({ access_code_id: looked.row.id })
-    .eq("id", userId);
-
-  if (profileError) {
-    return { ok: false, error: "Could not attach the access code to your account." };
-  }
-
+  const { data, error } = await invoke;
+  if (error) return { ok: false, error: "Could not redeem that code. Try again." };
+  const result = parseAccessCodeRpc(data, "Could not redeem that code. Try again.");
+  if (!result.ok) return result;
   return { ok: true };
 }
