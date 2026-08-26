@@ -27,21 +27,22 @@ export function AudioPlayer() {
   else if (status === "paused") statusCopy = "Paused";
 
   return (
-    <div className="flex h-[var(--player-height)] items-center gap-3 border-t border-line bg-[var(--panel)] px-3 md:px-4">
-      <div
-        className="h-11 w-11 shrink-0 rounded-[var(--radius-md)] border border-line bg-[var(--control)]"
-        aria-hidden
-      />
+    <div className="relative z-30 flex h-[var(--player-height)] shrink-0 items-center gap-3 border-t border-line bg-[var(--panel)] px-3 md:px-4">
+      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-md)] border border-line bg-[var(--control)]" aria-hidden>
+        <span className="grid h-5 w-5 place-items-center rounded-full border border-amber/55 bg-[radial-gradient(circle,var(--amber)_0_2px,transparent_2px_6px,var(--border)_6px_7px,transparent_7px)]">
+          <span className="h-1 w-1 rounded-full bg-amber" />
+        </span>
+      </div>
       <div className="min-w-0 w-44 shrink">
-        <p className="truncate text-[13px] font-medium text-paper">
+        <p className="truncate text-[12.75px] font-semibold text-paper">
           {track?.title ?? "No track loaded"}
         </p>
-        <p className="truncate text-[12px] text-paper-dim">
+        <p className="truncate text-[11.5px] text-paper-dim">
           {track ? track.artist : statusCopy}
         </p>
       </div>
       <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
-        <span className="font-data w-10 text-[11.5px] text-muted">{formatDuration(s.playheadSec)}</span>
+        <span className="font-data w-10 text-[11px] text-muted">{formatDuration(s.playheadSec)}</span>
         <div className="min-w-0 flex-1">
           {track && peaks.length ? (
             <button
@@ -61,17 +62,17 @@ export function AudioPlayer() {
             <div className="h-px bg-[var(--hairline)]" />
           )}
         </div>
-        <span className="font-data w-10 text-[11.5px] text-muted">
+        <span className="font-data w-10 text-[11px] text-muted">
           {formatDuration(track?.durationSec)}
         </span>
       </div>
-      <p className="hidden font-data text-[11.5px] text-paper-dim lg:block">
+      <p className="hidden font-data text-[11px] text-paper-dim lg:block">
         {track ? `${formatBpm(track.bpm)} BPM · ${formatKey(track.key)}` : ""}
       </p>
       {track ? (
         <button
           type="button"
-          className="hidden h-8 items-center rounded-[var(--radius-md)] border border-line px-2.5 text-[12px] text-paper-dim hover:text-paper sm:inline-flex"
+          className="hidden h-8 items-center rounded-[var(--radius-md)] border border-line px-2.5 text-[11.5px] text-paper-dim hover:text-paper sm:inline-flex"
           onClick={() => s.addToCrate(track.id)}
         >
           <IconPlus className="mr-1 h-3 w-3" />

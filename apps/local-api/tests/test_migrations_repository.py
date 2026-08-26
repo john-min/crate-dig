@@ -88,9 +88,18 @@ def test_connect_configures_sqlite_and_migrates_an_existing_database(tmp_path: P
             "projection_artifacts",
             "evaluation_sets",
             "evaluation_anchors",
+            "evaluation_set_tracks",
+            "evaluation_configurations",
+            "evaluation_runs",
+            "evaluation_neighbor_results",
+            "evaluation_run_metrics",
             "similarity_judgments",
         }.issubset(tables)
         assert conn.execute("select title from tracks where id = 'track-1'").fetchone()[0] == "Before migrations"
+        metadata = conn.execute(
+            "select bpm, musical_key, bpm_source, key_source from tracks where id = 'track-1'"
+        ).fetchone()
+        assert tuple(metadata) == (None, "", "", "")
     finally:
         conn.close()
 
@@ -151,6 +160,33 @@ def test_manifest_identity_and_analysis_submission_are_idempotent(tmp_path: Path
             stages=definitions,
             idempotency_key="request-123",
         )
+    conn.close()
+
+
+def test_manifest_upsert_repairs_legacy_hash_for_structurally_equal_json(tmp_path: Path):
+    conn = db.connect(tmp_path / "legacy-manifest.sqlite")
+    repository = Repository(conn)
+    manifest_document = {
+        "name": "fast-local",
+        "version": "1.0.0",
+        "extractors": [{"name": "librosa", "version": "2.0.0"}],
+    }
+    manifest = repository.upsert_model_set_manifest(
+        "fast-local", "1.0.0", manifest_document
+    )
+    conn.execute(
+        "update model_set_manifests set manifest_hash = ? where id = ?",
+        ("legacy-digest", manifest["id"]),
+    )
+    conn.commit()
+
+    repaired = repository.upsert_model_set_manifest(
+        "fast-local", "1.0.0", manifest_document
+    )
+
+    assert repaired["id"] == manifest["id"]
+    assert repaired["manifest_hash"] != "legacy-digest"
+    assert repaired["manifest_json"] == manifest_document
     conn.close()
 
 

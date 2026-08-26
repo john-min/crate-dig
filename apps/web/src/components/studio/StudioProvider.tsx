@@ -15,12 +15,13 @@ import { formatKey, keysCompatible } from "@/lib/studio/format";
 import { activeFilterCount, matchesStudioFilters } from "@/lib/studio/filters";
 import { getMockLibrary } from "@/lib/studio/mock-library";
 import { diskTrackToStudio } from "@/lib/studio/from-local";
-import { fetchDiskTracks, localApiHealth } from "@/lib/studio/local-api";
+import { fetchDiskLibrary, localApiHealth } from "@/lib/studio/local-api";
 import { nearbyTracks, reasonStack, similarityScore } from "@/lib/studio/similarity";
 import type {
   ColorBy,
   Crate,
   LiveMessage,
+  LibraryView,
   MobileView,
   PlayStatus,
   QCard,
@@ -92,6 +93,15 @@ type StudioContextValue = {
   howToReadOpen: boolean;
   setHowToReadOpen: (value: boolean) => void;
   librarySource: "mock" | "disk";
+  libraryName: string;
+  libraryView: LibraryView;
+  setLibraryView: (value: LibraryView) => void;
+  playedIds: Set<string>;
+  recentCount: number;
+  unplayedCount: number;
+  analysisReady: boolean;
+  selectNearest: (limit?: number) => void;
+  addSelectedToCrate: () => void;
 };
 
 const StudioContext = createContext<StudioContextValue | null>(null);
@@ -99,6 +109,7 @@ const StudioContext = createContext<StudioContextValue | null>(null);
 export function StudioProvider({ children }: { children: ReactNode }) {
   const mockLib = useMemo(() => getMockLibrary(), []);
   const [diskTracks, setDiskTracks] = useState<StudioTrack[] | null>(null);
+  const [libraryName, setLibraryName] = useState("Demo library");
   const usingDisk = Boolean(diskTracks && diskTracks.length > 0);
   const allTracks = usingDisk ? diskTracks! : mockLib.tracks;
   const initialCrates = mockLib.crates;
@@ -106,6 +117,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [colorBy, setColorBy] = useState<ColorBy>("mood");
   const [seedId, setSeedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
+  const [libraryView, setLibraryView] = useState<LibraryView>("all");
+  const [recentCutoff] = useState(() => Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playStatus, setPlayStatus] = useState<PlayStatus>("idle");
@@ -139,14 +153,16 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("source") === "mock") return;
     let cancelled = false;
     (async () => {
       const up = await localApiHealth();
       if (!up || cancelled) return;
       try {
-        const rows = await fetchDiskTracks();
-        if (cancelled || !rows.length) return;
-        setDiskTracks(rows.map(diskTrackToStudio));
+        const result = await fetchDiskLibrary();
+        if (cancelled || !result?.tracks.length) return;
+        setDiskTracks(result.tracks.map(diskTrackToStudio));
+        setLibraryName(result.library.name);
         setCrates([
           {
             id: "local",
@@ -158,7 +174,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           },
         ]);
         setActiveCrateId("local");
-        announce(`Loaded ${rows.length} tracks from disk.`);
+        announce(`Loaded ${result.tracks.length} tracks from ${result.library.name}.`);
       } catch {
         /* stay on mock library */
       }
@@ -230,16 +246,35 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [tracks, selectedIds],
   );
 
-  const visible = useMemo(
-    () => tracks.filter((t) => matchesStudioFilters(t, filters, seed)),
-    [tracks, filters, seed],
+  const visible = useMemo(() => {
+    return tracks.filter((track) => {
+      if (libraryView === "unplayed" && playedIds.has(track.id)) return false;
+      if (
+        libraryView === "recent" &&
+        (!track.createdAt || new Date(track.createdAt).getTime() < recentCutoff)
+      ) {
+        return false;
+      }
+      return matchesStudioFilters(track, filters, seed);
+    });
+  }, [tracks, filters, seed, libraryView, playedIds, recentCutoff]);
+
+  const recentCount = useMemo(
+    () =>
+      tracks.filter(
+        (track) => track.createdAt && new Date(track.createdAt).getTime() >= recentCutoff,
+      ).length,
+    [recentCutoff, tracks],
   );
+  const unplayedCount = tracks.length - playedIds.size;
+  const analysisReady = tracks.some((track) => track.analysisStatus === "ok" && track.bpm != null);
 
   const filterCount = activeFilterCount(filters);
 
   const scoreFor = useCallback(
-    (track: StudioTrack) => (seed && track.id !== seed.id ? similarityScore(seed, track) : null),
-    [seed],
+    (track: StudioTrack) =>
+      analysisReady && seed && track.id !== seed.id ? similarityScore(seed, track) : null,
+    [analysisReady, seed],
   );
 
   const reasonsFor = useCallback(
@@ -328,6 +363,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const targetId = id ?? playingId ?? selectedIds[0];
       const track = tracks.find((t) => t.id === targetId);
       if (!track) return;
+      setPlayedIds((prev) => new Set([...prev, track.id]));
       stopTimer();
       const el = audioRef.current;
       const resume = Boolean(
@@ -435,6 +471,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     (prompt?: string) => {
       const text = (prompt ?? qPrompt).trim();
       setQOpen(true);
+      if (!analysisReady) {
+        setQRequest("no-results");
+        setQCards([]);
+        announce("Analyze this library before Q searches for sonic neighbors.");
+        return;
+      }
       setQRequest("loading");
       announce("Q is listening for nearby records");
       window.setTimeout(() => {
@@ -466,15 +508,16 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         }
       }, 700);
     },
-    [announce, buildQCards, primarySelected, qPrompt, seed, selectedIds.length, visible],
+    [analysisReady, announce, buildQCards, primarySelected, qPrompt, seed, selectedIds.length, visible],
   );
 
   const openQ = useCallback(() => {
     setQOpen(true);
     setQRequest("idle");
     const from = primarySelected ?? seed;
-    if (from) setQCards(buildQCards(from, visible));
-  }, [buildQCards, primarySelected, seed, visible]);
+    if (from && analysisReady) setQCards(buildQCards(from, visible));
+    else setQCards([]);
+  }, [analysisReady, buildQCards, primarySelected, seed, visible]);
 
   const closeQ = useCallback(() => setQOpen(false), []);
   const toggleQ = useCallback(() => {
@@ -499,6 +542,28 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     },
     [activeCrateId, announce, tracks],
   );
+
+  const selectNearest = useCallback(
+    (limit = 20) => {
+      const ids = candidates.slice(0, limit).map((track) => track.id);
+      setSelectedIds(ids);
+      setFocusedId(ids[0] ?? null);
+      announce(`Selected ${ids.length} records in the current view.`);
+    },
+    [announce, candidates],
+  );
+
+  const addSelectedToCrate = useCallback(() => {
+    if (!selectedIds.length) return;
+    setCrates((prev) =>
+      prev.map((crate) =>
+        crate.id === activeCrateId
+          ? { ...crate, trackIds: [...new Set([...crate.trackIds, ...selectedIds])] }
+          : crate,
+      ),
+    );
+    announce(`Added ${selectedIds.length} selected records to the active crate.`);
+  }, [activeCrateId, announce, selectedIds]);
 
   const hideFromRecs = useCallback(
     (id: string) => {
@@ -605,6 +670,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     howToReadOpen,
     setHowToReadOpen,
     librarySource: usingDisk ? "disk" : "mock",
+    libraryName,
+    libraryView,
+    setLibraryView,
+    playedIds,
+    recentCount,
+    unplayedCount,
+    analysisReady,
+    selectNearest,
+    addSelectedToCrate,
   };
 
   return (

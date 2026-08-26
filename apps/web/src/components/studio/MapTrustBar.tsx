@@ -1,7 +1,7 @@
 "use client";
 
 import { useStudio } from "./StudioProvider";
-import { formatBpm, formatKey } from "@/lib/studio/format";
+import { formatBpm } from "@/lib/studio/format";
 
 export function MapTrustBar() {
   const s = useStudio();
@@ -24,14 +24,18 @@ export function MapTrustBar() {
   }
 
   return (
-    <div className="border-b border-line bg-ink/80 px-4 py-2.5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-[72ch] text-[13px] leading-5 text-paper-dim">{summary}</p>
+    <div
+      className="border-b border-[var(--hairline)] bg-[var(--panel)] px-4 py-2"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-[88ch] text-[11.5px] leading-[17px] text-paper-dim">{summary}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="tabular text-[12px] text-muted">{s.modelVersion}</p>
+          <p className="tabular text-[11px] text-muted">{s.modelVersion}</p>
           <button
             type="button"
-            className="text-[12px] text-paper hover:text-amber"
+            className="text-[11.5px] text-paper hover:text-amber"
             aria-expanded={s.howToReadOpen}
             onClick={() => s.setHowToReadOpen(!s.howToReadOpen)}
           >
@@ -40,7 +44,7 @@ export function MapTrustBar() {
         </div>
       </div>
       {s.howToReadOpen ? (
-        <div className="mt-2 max-w-[68ch] space-y-1.5 text-[13px] leading-5 text-paper-dim">
+        <div className="mt-2 max-w-[76ch] space-y-1.5 text-[12.5px] leading-[1.6] text-paper-dim">
           <p>
             Distance means sound, not genre. Records closer together share more measured audio traits.
             Color shows the selected dimension. Cluster names are generated from common traits and can
@@ -56,9 +60,6 @@ export function MapTrustBar() {
           </p>
         </div>
       ) : null}
-      <p className="mt-1 text-[12px] text-muted">
-        Seed {s.seed ? `${s.seed.title} · ${formatKey(s.seed.key)}` : "none"} · Color {s.colorBy}
-      </p>
     </div>
   );
 }

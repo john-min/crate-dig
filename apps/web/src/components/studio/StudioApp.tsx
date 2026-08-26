@@ -13,6 +13,7 @@ import { AudioPlayer } from "./AudioPlayer";
 import { StudioShortcuts } from "./StudioShortcuts";
 import { useStudio } from "./StudioProvider";
 import { MapFallbackList } from "./MapFallbackList";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
   const s = useStudio();
@@ -24,6 +25,11 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
   const drawerSheet = bp === "small";
   const nowPlayingCard = bp === "mobile";
   const exclusive = bp !== "desktop";
+  const bodyColumns = sheetFilters
+    ? "minmax(0, 1fr)"
+    : qIsDocked
+      ? "var(--left-rail-width) minmax(0, 1fr) var(--q-panel-width)"
+      : "var(--left-rail-width) minmax(0, 1fr)";
 
   useEffect(() => {
     if (!exclusive) return;
@@ -31,17 +37,17 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
   }, [exclusive, s.qOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-dvh flex-col bg-ink text-paper">
+    <div className="relative grid h-dvh grid-rows-[56px_minmax(0,1fr)_var(--player-height)] overflow-hidden bg-ink text-paper">
       <StudioShortcuts />
-      <div className="flex min-h-0 flex-1">
+      <StudioTopBar signedIn={signedIn} compact={sheetFilters} />
+      <div className="grid min-h-0" style={{ gridTemplateColumns: bodyColumns }}>
         {!sheetFilters ? (
-          <div className="hidden w-[15.5rem] shrink-0 lg:block">
+          <div className="min-h-0">
             <FilterRail signedIn={signedIn} />
           </div>
         ) : null}
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <StudioTopBar />
           {sheetFilters ? <FilterChipBar /> : null}
           {segmented ? (
             <div
@@ -76,7 +82,7 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
           ) : (
             <>
               <StudioMap />
-              <div className="h-[min(11.5rem,26vh)] shrink-0">
+              <div className="h-[min(204px,28vh)] min-h-0 shrink-0 overflow-hidden">
                 <CandidateList />
               </div>
             </>
@@ -93,7 +99,7 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
         </div>
 
         {qIsDocked ? (
-          <div className="w-[22rem] shrink-0">
+          <div className="min-h-0">
             <QPanel />
           </div>
         ) : null}
@@ -106,10 +112,13 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
   );
 }
 
-function StudioTopBar() {
+function StudioTopBar({ signedIn, compact }: { signedIn: boolean; compact: boolean }) {
   const s = useStudio();
   return (
-    <div className="flex h-12 items-center gap-2 border-b border-[var(--hairline)] px-3">
+    <header className="col-span-full flex min-w-0 items-center gap-3 border-b border-[var(--hairline)] bg-[var(--panel)] px-3.5">
+      <div className={compact ? "shrink-0" : "w-[calc(var(--left-rail-width)-14px)] shrink-0"}>
+        <Wordmark href={signedIn ? "/app" : "/map"} size="sm" />
+      </div>
       <label className="sr-only" htmlFor="studio-search">
         Search or describe a vibe
       </label>
@@ -119,17 +128,38 @@ function StudioTopBar() {
         value={s.filters.query}
         onChange={(e) => s.setFilters({ ...s.filters, query: e.target.value })}
         placeholder="Search or describe a vibe…"
-        className="h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border border-line bg-[var(--control)] px-3 text-[14px] outline-none placeholder:text-muted focus:border-violet/50"
+        className="h-9 w-[min(520px,46vw)] min-w-0 shrink rounded-[var(--radius-md)] border border-line bg-[var(--raised)] px-3.5 text-[13px] outline-none placeholder:text-muted focus:border-violet/60"
       />
+      <div className="ml-auto hidden h-9 items-center gap-2 rounded-[var(--radius-md)] border border-line bg-[var(--raised)] px-3 lg:flex">
+        <label className="text-[11.5px] text-muted" htmlFor="studio-color-by">
+          Colour by
+        </label>
+        <select
+          id="studio-color-by"
+          value={s.colorBy}
+          onChange={(event) => s.setColorBy(event.target.value as typeof s.colorBy)}
+          className="bg-transparent text-[12px] text-paper outline-none"
+        >
+          <option value="mood">Mood</option>
+          <option value="cluster">Cluster</option>
+          <option value="energy">Energy</option>
+          <option value="similarity">Similarity</option>
+        </select>
+      </div>
       <button
         type="button"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-violet text-[13px] font-semibold text-paper hover:bg-violet/90"
+        className={`flex h-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border px-3 text-[12px] font-medium transition-colors ${
+          s.qOpen
+            ? "border-violet/50 bg-violet/15 text-paper"
+            : "border-line bg-[var(--raised)] text-paper-dim hover:border-violet/40 hover:text-paper"
+        }`}
         aria-label={s.qOpen ? "Hide Q" : "Ask Q"}
         onClick={() => (s.qOpen ? s.closeQ() : s.openQ())}
       >
-        Q
+        <span className="mr-2 text-violet">Q</span>
+        <span className="hidden sm:inline">{s.qOpen ? "Close" : "Ask Q"}</span>
       </button>
-    </div>
+    </header>
   );
 }
 

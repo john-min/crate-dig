@@ -46,7 +46,7 @@ export function FilterChipBar() {
       )}
       <button
         type="button"
-        className="ml-auto shrink-0 text-[13px] text-paper-dim hover:text-paper"
+        className="ml-auto shrink-0 text-[12px] text-paper-dim hover:text-paper"
         onClick={() => s.setAdvancedOpen(true)}
       >
         Filters
@@ -68,7 +68,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`h-7 shrink-0 rounded-full px-2.5 text-[12px] capitalize ${
+      className={`h-7 shrink-0 rounded-full px-2.5 text-[11.5px] capitalize ${
         active ? "bg-violet/25 text-paper" : "border border-line text-paper-dim hover:text-paper"
       }`}
     >

@@ -129,6 +129,13 @@ class Repository:
                 self.conn.rollback()
                 raise
 
+    @contextmanager
+    def write_transaction(self) -> Iterator[None]:
+        """Expose the repository's short, serialized SQLite write boundary."""
+
+        with self._write():
+            yield
+
     def upsert_model_set_manifest(
         self,
         name: str | Mapping[str, Any] | object,
@@ -161,9 +168,26 @@ class Repository:
             ).fetchone()
             if existing is not None:
                 if existing["manifest_hash"] != computed_hash:
-                    raise ConflictError(
-                        f"model set {name!r} version {version!r} is immutable and already has different content"
+                    # Older builds persisted a digest produced by a different
+                    # serializer.  Preserve name/version immutability while
+                    # allowing a one-time hash repair when the actual manifest
+                    # document is structurally identical.
+                    try:
+                        stored_manifest = json.loads(existing["manifest_json"])
+                    except (TypeError, json.JSONDecodeError):
+                        stored_manifest = None
+                    if stored_manifest is None or _canonical_json(stored_manifest) != payload:
+                        raise ConflictError(
+                            f"model set {name!r} version {version!r} is immutable and already has different content"
+                        )
+                    self.conn.execute(
+                        "update model_set_manifests set manifest_hash = ?, manifest_json = ? where id = ?",
+                        (computed_hash, payload, existing["id"]),
                     )
+                    existing = self.conn.execute(
+                        "select * from model_set_manifests where id = ?",
+                        (existing["id"],),
+                    ).fetchone()
                 return _row(existing) or {}
             self.conn.execute(
                 """

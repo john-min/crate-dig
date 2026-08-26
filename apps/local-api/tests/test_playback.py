@@ -58,6 +58,10 @@ def test_folder_import_and_range_playback(client: TestClient, tmp_path: Path):
     assert "Salt Flats" in titles
     salt = next(row for row in tracks if row["title"] == "Salt Flats")
     assert salt["artist"] == "Anais Kerr"
+    assert salt["bpm"] is None
+    assert salt["key"] is None
+    assert salt["bpm_source"] is None
+    assert salt["key_source"] is None
     assert salt["missing"] is False
     assert salt["preview_url"] == f"/audio/{salt['id']}"
     assert len(salt["audio_content_hash"]) == 64
@@ -76,6 +80,30 @@ def test_folder_import_and_range_playback(client: TestClient, tmp_path: Path):
 
     unknown = client.get("/audio/not-a-track")
     assert unknown.status_code == 404
+
+
+def test_folder_import_infers_artist_from_dj_export_hierarchy(
+    client: TestClient, tmp_path: Path
+):
+    folder = tmp_path / "Jeff USB"
+    album = folder / "Contents" / "Massiande" / "Live Cuts"
+    album.mkdir(parents=True)
+    write_silence_wav(album / "Dancing Stuff.wav")
+    write_silence_wav(album / "Blake.08- The Change Of Love.wav")
+
+    imported = client.post(
+        "/imports/folder",
+        json={"folder_path": str(folder), "library_name": "Jeff USB"},
+    )
+
+    assert imported.status_code == 200
+    tracks = client.get(f"/libraries/{imported.json()['library_id']}/tracks").json()[
+        "tracks"
+    ]
+    by_title = {row["title"]: row for row in tracks}
+    assert by_title["Dancing Stuff"]["artist"] == "Massiande"
+    assert by_title["The Change Of Love"]["artist"] == "Blake.08"
+    assert by_title["Dancing Stuff"]["created_at"]
 
 
 def test_rejects_arbitrary_paths(client: TestClient, tmp_path: Path):

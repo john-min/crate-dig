@@ -27,6 +27,11 @@ def cluster_embeddings(
     ids = [t.track_id for t in tracks]
     embz = _standardize(embeddings)
     viz, _ = _reduce(embz, 2, seed=seed)
+    # PCA/UMAP can return only N-1 components for a two-track corpus. The map
+    # contract always requires x/y, so retain the informative axis and fill the
+    # unavailable axis deterministically instead of failing the entire run.
+    if viz.shape[1] < 2:
+        viz = np.pad(viz, ((0, 0), (0, 2 - viz.shape[1])), mode="constant")
     cluster_space, _ = _reduce(embz, min(10, embz.shape[1]), seed=seed)
     labels, _ = _cluster(cluster_space, min_cluster_size)
     reduced = reduce_embeddings(embeddings, dim=reduced_dim, seed=seed)

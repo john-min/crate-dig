@@ -66,6 +66,13 @@ def test_extractor_spec_is_immutable_and_cache_identity_is_content_addressed():
     assert HASH_A in identity
 
 
+def test_extractor_spec_json_sorts_unordered_manifest_fields():
+    payload = make_spec().model_dump(mode="json")
+
+    assert payload["supported_scopes"] == ["track", "window"]
+    assert payload["output_roles"] == ["retrieval"]
+
+
 def test_cache_identity_includes_full_model_identity_when_present():
     artifact = ModelArtifact(
         name="music-model",

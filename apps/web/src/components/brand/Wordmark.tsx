@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function Wordmark({ href = "/", size = "md" }: { href?: string; size?: "sm" | "md" }) {
   const mark = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
-  const type = size === "sm" ? "text-[13px]" : "text-[15px]";
+  const type = size === "sm" ? "text-[13px]" : "text-[14px]";
 
   return (
     <Link
@@ -13,7 +13,7 @@ export function Wordmark({ href = "/", size = "md" }: { href?: string; size?: "s
         aria-hidden
         className={`${mark} rounded-full border border-amber/80 shadow-[inset_0_0_0_3px_var(--ink),inset_0_0_0_4.5px_oklch(0.79_0.11_78/0.9)]`}
       />
-      <span className={`${type} font-medium tracking-[0.04em]`}>Crate Dig</span>
+      <span className={`${type} font-semibold tracking-[0.01em]`}>Crate Dig</span>
     </Link>
   );
 }

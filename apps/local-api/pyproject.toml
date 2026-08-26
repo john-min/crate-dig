@@ -12,6 +12,8 @@ authors = [{ name = "Crate Dig" }]
 dependencies = [
   "cratedig-engine[fast]",
   "fastapi>=0.115",
+  "pyrekordbox>=0.4.4",
+  "rekordbox-pdb",
   "uvicorn[standard]>=0.32",
 ]
 
@@ -36,3 +38,4 @@ pythonpath = [".", "../../packages/engine"]
 
 [tool.uv.sources]
 cratedig-engine = { path = "../../packages/engine", editable = true }
+rekordbox-pdb = { git = "https://github.com/fragmede/rekordbox-pdb.git" }

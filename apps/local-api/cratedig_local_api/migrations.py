@@ -243,6 +243,124 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "create index analysis_stages_cache_key_idx on analysis_stages (cache_key, status)",
         ),
     ),
+    Migration(
+        4,
+        "similarity_evaluation_v1",
+        (
+            "alter table evaluation_sets add column purpose text not null default ''",
+            "alter table evaluation_sets add column hidden_metadata_policy_json text not null default '{}'",
+            "alter table evaluation_sets add column split_policy_json text not null default '{}'",
+            "alter table evaluation_sets add column evaluator_membership_json text not null default '[]'",
+            "alter table evaluation_anchors add column split text not null default 'evaluation' check (split in ('train', 'validation', 'test', 'evaluation'))",
+            "alter table evaluation_anchors add column held_out integer not null default 0 check (held_out in (0, 1))",
+            "alter table evaluation_anchors add column candidate_pool_json text not null default '[]'",
+            """
+            create table evaluation_set_tracks (
+              evaluation_set_id text not null references evaluation_sets (id) on delete cascade,
+              track_id text not null references tracks (id) on delete cascade,
+              split text not null default 'evaluation'
+                check (split in ('train', 'validation', 'test', 'evaluation')),
+              created_at text not null,
+              primary key (evaluation_set_id, track_id)
+            )
+            """,
+            "create index evaluation_set_tracks_split_idx on evaluation_set_tracks (evaluation_set_id, split, track_id)",
+            """
+            create table evaluation_configurations (
+              id text primary key,
+              evaluation_set_id text not null references evaluation_sets (id) on delete cascade,
+              name text not null,
+              version text not null,
+              analysis_run_id text references analysis_runs (id) on delete restrict,
+              channel text not null default 'global',
+              parameters_json text not null default '{}',
+              created_at text not null,
+              unique (evaluation_set_id, name, version)
+            )
+            """,
+            "create index evaluation_configurations_set_idx on evaluation_configurations (evaluation_set_id, name, version)",
+            """
+            create table evaluation_runs (
+              id text primary key,
+              evaluation_set_id text not null references evaluation_sets (id) on delete cascade,
+              evaluation_set_version text not null,
+              idempotency_key text not null unique,
+              status text not null default 'completed'
+                check (status in ('queued', 'running', 'completed', 'failed')),
+              requested_k integer not null default 25 check (requested_k > 0),
+              configuration_ids_json text not null default '[]',
+              created_at text not null,
+              finished_at text,
+              updated_at text not null
+            )
+            """,
+            "create index evaluation_runs_set_idx on evaluation_runs (evaluation_set_id, created_at)",
+            """
+            create table evaluation_neighbor_results (
+              evaluation_run_id text not null references evaluation_runs (id) on delete cascade,
+              evaluation_set_id text not null references evaluation_sets (id) on delete cascade,
+              anchor_track_id text not null references tracks (id) on delete cascade,
+              configuration_id text not null references evaluation_configurations (id) on delete cascade,
+              candidate_track_id text not null references tracks (id) on delete cascade,
+              rank integer not null check (rank > 0),
+              score real,
+              distance real,
+              components_json text not null default '{}',
+              reason_codes_json text not null default '[]',
+              provenance_json text not null default '{}',
+              created_at text not null,
+              primary key (evaluation_run_id, anchor_track_id, configuration_id, candidate_track_id),
+              unique (evaluation_run_id, anchor_track_id, configuration_id, rank),
+              check (anchor_track_id <> candidate_track_id)
+            )
+            """,
+            "create index evaluation_neighbors_lookup_idx on evaluation_neighbor_results (evaluation_set_id, anchor_track_id, configuration_id, rank)",
+            """
+            create table evaluation_run_metrics (
+              evaluation_run_id text not null references evaluation_runs (id) on delete cascade,
+              configuration_id text not null references evaluation_configurations (id) on delete cascade,
+              metric_name text not null,
+              dimension text not null default 'overall',
+              k integer not null default 0 check (k >= 0),
+              value real,
+              sample_count integer not null default 0 check (sample_count >= 0),
+              details_json text not null default '{}',
+              computed_at text not null,
+              primary key (evaluation_run_id, configuration_id, metric_name, dimension, k)
+            )
+            """,
+            "alter table similarity_judgments add column evaluator_id text not null default 'local'",
+            "alter table similarity_judgments add column judgment_type text not null default 'pair_rating' check (judgment_type in ('pair_rating', 'triplet', 'top_k'))",
+            "alter table similarity_judgments add column dimension text not null default 'overall'",
+            "alter table similarity_judgments add column ordinal_rating integer check (ordinal_rating is null or (ordinal_rating >= 0 and ordinal_rating <= 4))",
+            "alter table similarity_judgments add column candidate_configuration_id text references evaluation_configurations (id) on delete set null",
+            "alter table similarity_judgments add column evaluation_run_id text references evaluation_runs (id) on delete set null",
+            "alter table similarity_judgments add column rank_position integer check (rank_position is null or rank_position > 0)",
+            "alter table similarity_judgments add column blind integer not null default 1 check (blind in (0, 1))",
+            "alter table similarity_judgments add column idempotency_key text",
+            "alter table similarity_judgments add column updated_at text",
+            "create unique index similarity_judgments_idempotency_idx on similarity_judgments (evaluation_set_id, idempotency_key) where idempotency_key is not null",
+            "create index similarity_judgments_config_idx on similarity_judgments (evaluation_set_id, candidate_configuration_id, dimension, judgment_type)",
+        ),
+    ),
+    Migration(
+        5,
+        "curated_track_metadata",
+        (
+            "alter table tracks add column genre text not null default ''",
+            "alter table tracks add column label text not null default ''",
+            "alter table tracks add column bpm real",
+            "alter table tracks add column musical_key text not null default ''",
+            "alter table tracks add column rating integer",
+            "alter table tracks add column date_added text not null default ''",
+            "alter table tracks add column rekordbox_track_id text not null default ''",
+            "alter table tracks add column bpm_source text not null default ''",
+            "alter table tracks add column key_source text not null default ''",
+            "create index tracks_rekordbox_track_id_idx on tracks (rekordbox_track_id)",
+            "create index tracks_bpm_idx on tracks (bpm)",
+            "create index tracks_musical_key_idx on tracks (musical_key)",
+        ),
+    ),
 )
 
 

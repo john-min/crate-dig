@@ -209,6 +209,55 @@ def test_resume_skips_terminal_rows(tmp_path):
     assert len(store.members[run_id]) == 1
 
 
+def test_reissuing_completed_run_is_a_noop(tmp_path):
+    store = FakeStore()
+    objects = FakeObjectStore()
+    run_id, _tracks = _seed_library(store, objects, n=2)
+    backend = FakeBackend()
+    job = AnalyzeRunJob(store, objects, workdir=tmp_path, backend=backend)
+    job.run(run_id)
+    updates_after_first_run = list(store.run_updates)
+    object_count = len(objects.objects)
+
+    job.run(run_id)
+
+    assert len(backend.calls) == 2
+    assert store.run_updates == updates_after_first_run
+    assert len(objects.objects) == object_count
+
+
+def test_resume_fails_closed_when_resolved_model_changed(tmp_path):
+    store = FakeStore()
+    objects = FakeObjectStore()
+    run_id, _tracks = _seed_library(store, objects, n=1)
+    store.runs[run_id].status = "running"
+    store.runs[run_id].model_version = "old-model-v1"
+
+    with pytest.raises(AnalyzeRunError, match="identity mismatch"):
+        AnalyzeRunJob(
+            store, objects, workdir=tmp_path, backend=FakeBackend()
+        ).run(run_id)
+
+    assert store.runs[run_id].status == "failed"
+    assert store.runs[run_id].tracks_done == 0
+
+
+def test_cluster_ids_are_stable_when_interrupted_run_resumes(tmp_path):
+    store = FakeStore()
+    objects = FakeObjectStore()
+    run_id, _tracks = _seed_library(store, objects, n=3)
+    job = AnalyzeRunJob(store, objects, workdir=tmp_path, backend=FakeBackend())
+    job.run(run_id)
+    first_ids = [item.id for item in store.clusters[run_id]]
+
+    # Simulate a stale worker being resumed after all per-track rows persisted
+    # but before the terminal run update was observed.
+    store.runs[run_id].status = "running"
+    job.run(run_id)
+
+    assert [item.id for item in store.clusters[run_id]] == first_ids
+
+
 def test_missing_run_raises(tmp_path):
     job = AnalyzeRunJob(FakeStore(), FakeObjectStore(), workdir=tmp_path, backend=FakeBackend())
     with pytest.raises(AnalyzeRunError, match="not found"):

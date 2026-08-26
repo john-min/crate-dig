@@ -8,6 +8,8 @@ evidence in place.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from enum import Enum
 from typing import Annotated, Self
@@ -19,6 +21,7 @@ from pydantic import (
     HttpUrl,
     StringConstraints,
     field_validator,
+    field_serializer,
     model_validator,
 )
 
@@ -127,6 +130,12 @@ class ExtractorSpec(ImmutableRecord):
     separator_version: NonEmptyStr | None = None
     separator_weights_sha256: Sha256 | None = None
     separator_configuration_sha256: Sha256 | None = None
+
+    @field_serializer("supported_scopes", "output_roles", when_used="json")
+    def serialize_unordered_enums(self, values: frozenset[Enum]) -> list[str]:
+        """Keep manifest JSON and content hashes stable across processes."""
+
+        return sorted(str(value.value) for value in values)
 
     @model_validator(mode="after")
     def validate_separator_identity(self) -> Self:
@@ -393,6 +402,24 @@ class ModelSetManifest(ImmutableRecord):
     @property
     def extractors(self) -> tuple[ExtractorSpec, ...]:
         return self.required_extractors + self.optional_extractors
+
+    @property
+    def manifest_sha256(self) -> str:
+        """Stable identity for the complete executable model-set declaration.
+
+        ``name`` and ``version`` are useful human identifiers, but cannot prove
+        that two processes received identical extractor/checkpoint/configuration
+        declarations.  The digest is deliberately computed from the complete
+        validated record and can be persisted with run evidence.
+        """
+
+        payload = json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
 
 
 __all__ = [

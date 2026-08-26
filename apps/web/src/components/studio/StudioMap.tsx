@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapLegend } from "./MapLegend";
-import { ClusterExplanationCard } from "./ClusterExplanationCard";
 import { NoResults } from "./NoResults";
 import { MapFallbackList } from "./MapFallbackList";
 import { useStudio } from "./StudioProvider";
@@ -34,8 +33,10 @@ function centroidScores(tracks: StudioTrack[]): Record<string, number> {
 export function StudioMap() {
   const s = useStudio();
   const bp = useBreakpoint();
+  const [fitRequestKey, setFitRequestKey] = useState(0);
   const visibleIds = useMemo(() => new Set(s.visible.map((t) => t.id)), [s.visible]);
   const scores = useMemo(() => {
+    if (!s.analysisReady) return {};
     const origin = s.seed ?? s.primarySelected;
     if (!origin) return centroidScores(s.visible);
     const out: Record<string, number> = {};
@@ -43,36 +44,61 @@ export function StudioMap() {
       out[track.id] = track.id === origin.id ? 1 : similarityScore(origin, track);
     }
     return out;
-  }, [s.seed, s.primarySelected, s.visible]);
+  }, [s.analysisReady, s.seed, s.primarySelected, s.visible]);
 
   if (!s.webglOk) return <MapFallbackList />;
   if (s.visible.length === 0) return <NoResults />;
 
   return (
-    <div className="relative min-h-0 flex-1">
-      <MapCanvas
-        tracks={s.tracks as import("@/lib/types/track").MapTrack[]}
-        selectedTrackId={s.primarySelected?.id ?? null}
-        playingTrackId={s.playing?.id ?? null}
-        seedTrackIds={s.seedIds}
-        visibleIds={visibleIds}
-        colorBy={s.colorBy}
-        scores={scores}
-        onColorBy={s.setColorBy}
-        onSelectTrack={(id) => {
-          if (id) {
-            if (!docksQ(bp)) s.closeQ();
-            s.openDrawer(id);
-          } else s.selectTrack(null);
-        }}
-        onWebgl={s.setWebglOk}
-      />
-      <div className="pointer-events-none absolute bottom-3 left-3 z-10">
-        <MapLegend />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <MapLegend onFit={() => setFitRequestKey((key) => key + 1)} />
+      <div className="relative min-h-0 flex-1">
+        <MapCanvas
+          tracks={s.tracks as import("@/lib/types/track").MapTrack[]}
+          selectedTrackId={s.primarySelected?.id ?? null}
+          playingTrackId={s.playing?.id ?? null}
+          seedTrackIds={s.seedIds}
+          visibleIds={visibleIds}
+          colorBy={s.colorBy}
+          scores={scores}
+          fitRequestKey={fitRequestKey}
+          onSelectTrack={(id) => {
+            if (id) {
+              s.selectTrack(id);
+              if (docksQ(bp)) s.openQ();
+            } else s.selectTrack(null);
+          }}
+          onWebgl={s.setWebglOk}
+        />
+        {s.selectedIds.length > 0 ? <SelectionActions /> : null}
       </div>
-      <div className="pointer-events-none absolute left-3 top-14 z-10">
-        <ClusterExplanationCard />
-      </div>
+    </div>
+  );
+}
+
+function SelectionActions() {
+  const s = useStudio();
+  return (
+    <div className="absolute inset-x-4 bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border border-line bg-[color-mix(in_srgb,var(--panel)_94%,transparent)] px-3 py-2 shadow-[0_14px_36px_rgba(0,0,0,0.42)] backdrop-blur">
+      <strong className="mr-1 tabular text-[12.5px] font-semibold text-paper">
+        {s.selectedIds.length} selected
+      </strong>
+      <button type="button" className="cd-selection-action" onClick={s.addSelectedToCrate}>
+        Add to crate
+      </button>
+      <button type="button" className="cd-selection-action" onClick={s.openQ}>
+        Ask Q
+      </button>
+      <button type="button" className="cd-selection-action" onClick={() => s.selectNearest(20)}>
+        Select nearest 20
+      </button>
+      <button
+        type="button"
+        className="ml-auto text-[12px] text-paper-dim hover:text-paper"
+        onClick={() => s.selectTrack(null)}
+      >
+        Clear
+      </button>
     </div>
   );
 }

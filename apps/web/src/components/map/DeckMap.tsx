@@ -8,10 +8,9 @@ import fixture from "@/data/synthetic-tracks-3k.json";
 import type { MapTrack } from "@/lib/types/track";
 import type { ColorBy, MapCanvasProps, PlotTrack } from "./types";
 import { toPlotTracks } from "./normalize";
-import { dimFill, glowFill, HIGHLIGHT, trackFill } from "./colors";
+import { clusterRgb, dimFill, glowFill, HIGHLIGHT, trackFill } from "./colors";
 import { fitTracksToView } from "./fitView";
 import { glowRadiusFromScore, radiusFromScore } from "./radius";
-import { MapOverlays } from "./MapOverlays";
 
 const VIEW = new OrthographicView({
   id: "track-map",
@@ -36,17 +35,15 @@ export default function DeckMap({
   scores,
   onSelectTrack,
   onHoverTrack,
-  onColorBy,
   onWebgl,
+  fitRequestKey = 0,
   className = "",
 }: MapCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [userView, setUserView] = useState<OrthographicViewState | null>(null);
   const [viewKey, setViewKey] = useState<string | null>(null);
-  const [localColorBy, setLocalColorBy] = useState<ColorBy>("mood");
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
-  const [hover, setHover] = useState<{ x: number; y: number; track: PlotTrack } | null>(null);
 
   const usingFixture = !tracks?.length;
   const plotTracks = useMemo(() => {
@@ -54,7 +51,7 @@ export default function DeckMap({
     return toPlotTracks(source);
   }, [tracks, usingFixture]);
 
-  const colorBy = colorByProp ?? localColorBy;
+  const colorBy: ColorBy = colorByProp ?? "mood";
   const selectedId = selectedTrackId ?? internalSelected;
   const playingId = playingTrackId;
   const seedIds = useMemo(() => new Set(seedTrackIds ?? []), [seedTrackIds]);
@@ -81,7 +78,7 @@ export default function DeckMap({
   );
 
   const labels = useMemo(() => {
-    const acc = new Map<number, { name: string; x: number; y: number; n: number }>();
+    const acc = new Map<number, { name: string; x: number; y: number; n: number; color: [number, number, number] }>();
     for (const track of visible) {
       if (track.cluster < 0) continue;
       const cur = acc.get(track.cluster);
@@ -90,15 +87,22 @@ export default function DeckMap({
         cur.y += track.y;
         cur.n += 1;
       } else {
-        acc.set(track.cluster, { name: track.clusterName.toUpperCase(), x: track.x, y: track.y, n: 1 });
+        acc.set(track.cluster, {
+          name: track.clusterName.toUpperCase(),
+          x: track.x,
+          y: track.y,
+          n: 1,
+          color: clusterRgb(track.cluster),
+        });
       }
     }
+    const labelThreshold = Math.max(2, Math.ceil(visible.length * 0.01));
     return [...acc.values()]
-      .filter((c) => c.n >= 12)
-      .map((c) => ({ name: c.name, x: c.x / c.n, y: c.y / c.n }));
+      .filter((c) => c.n >= labelThreshold)
+      .map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
   }, [visible]);
 
-  const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}`;
+  const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}:fit-${fitRequestKey}`;
   const fitted = useMemo(
     () => fitTracksToView(plotTracks, size.width, size.height),
     [plotTracks, size.height, size.width],
@@ -154,8 +158,6 @@ export default function DeckMap({
   const onHover = useCallback(
     (info: PickingInfo<PlotTrack>) => {
       const track = info.object ?? null;
-      if (track) setHover({ x: info.x, y: info.y, track });
-      else setHover(null);
       onHoverTrack?.(track?.raw ?? null);
     },
     [onHoverTrack],
@@ -186,6 +188,15 @@ export default function DeckMap({
     const glowOf = (id: string) => glowRadiusFromScore(scoreOf(id));
 
     return [
+      new ScatterplotLayer({
+        id: "cluster-fields",
+        data: labels,
+        pickable: false,
+        radiusUnits: "pixels",
+        getPosition: (d: { x: number; y: number }) => [d.x, d.y],
+        getRadius: (d: { n: number }) => Math.min(96, 50 + Math.sqrt(d.n) * 2.2),
+        getFillColor: (d: { color: [number, number, number] }) => [...d.color, 8],
+      }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
         id: "tracks-dim",
@@ -253,12 +264,27 @@ export default function DeckMap({
         updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new TextLayer({
-        id: "cluster-labels",
+        id: "cluster-label-names",
         data: labels,
         getPosition: (d: { x: number; y: number }) => [d.x, d.y],
         getText: (d: { name: string }) => d.name,
-        getSize: 12,
-        getColor: [232, 224, 210, 140],
+        getSize: 11,
+        getColor: (d: { color: [number, number, number] }) => [...d.color, 205],
+        getPixelOffset: [0, -7],
+        getTextAnchor: "middle",
+        getAlignmentBaseline: "center",
+        fontFamily: "Instrument Sans, ui-sans-serif, sans-serif",
+        fontSettings: { sdf: false },
+        pickable: false,
+      }),
+      new TextLayer({
+        id: "cluster-label-counts",
+        data: labels,
+        getPosition: (d: { x: number; y: number }) => [d.x, d.y],
+        getText: (d: { n: number }) => `${d.n.toLocaleString()} records`,
+        getSize: 11,
+        getColor: [91, 99, 115, 185],
+        getPixelOffset: [0, 8],
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",
         fontFamily: "Instrument Sans, ui-sans-serif, sans-serif",
@@ -309,7 +335,7 @@ export default function DeckMap({
   return (
     <div
       ref={wrapRef}
-      className={`relative h-full min-h-0 w-full overflow-hidden bg-[#08090b] ${className}`}
+      className={`cd-canvas relative h-full min-h-0 w-full overflow-hidden ${className}`}
       tabIndex={0}
       aria-label="Library map. Arrow keys pan, plus and minus zoom, Home fits the view."
       onKeyDown={panZoom}
@@ -329,20 +355,6 @@ export default function DeckMap({
         }
         style={{ background: "transparent" }}
       />
-      <div className="pointer-events-none absolute inset-0">
-        <MapOverlays
-          colorBy={colorBy}
-          onColorBy={(value) => {
-            setLocalColorBy(value);
-            onColorBy?.(value);
-          }}
-          visibleCount={visible.length}
-          totalCount={plotTracks.length}
-          usingFixture={usingFixture}
-          hover={hover}
-          onFit={applyFit}
-        />
-      </div>
     </div>
   );
 }

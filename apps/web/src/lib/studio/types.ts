@@ -2,11 +2,12 @@ export type Energy = "low" | "medium" | "peak" | "driving";
 export type Texture = "raw" | "atmospheric" | "minimal" | "percussive" | "vocal";
 export type Mood = "warm" | "euphoric" | "dark" | "dreamy" | "hypnotic";
 export type ColorBy = "cluster" | "mood" | "energy" | "similarity";
-export type AnalysisStatus = "ok" | "failed" | "missing-metadata" | "duplicate";
+export type AnalysisStatus = "ok" | "pending" | "failed" | "missing-metadata" | "duplicate";
 export type PreviewState = "ready" | "missing" | "failed" | "expired";
 export type PlayStatus = "idle" | "loading" | "playing" | "paused" | "buffering" | "failed";
 export type RowDensity = "comfortable" | "compact";
 export type MobileView = "map" | "list" | "crate";
+export type LibraryView = "all" | "recent" | "unplayed";
 export type Breakpoint = "mobile" | "small" | "tablet" | "laptop" | "desktop";
 
 export type StudioTrack = {
@@ -34,6 +35,7 @@ export type StudioTrack = {
   energyScore: number | null;
   hiddenFromRecs?: boolean;
   previewUrl?: string | null;
+  createdAt?: string;
 };
 
 export type StudioFilters = {

@@ -8,6 +8,7 @@ the source hash or pipeline/model/schema version changes.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -17,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cratedig_engine.records import ExtractorSpec, FeatureBundle, Sha256
 from cratedig_engine.schemas import AnalysisResult
+
+
+class CacheCorruptionError(ValueError):
+    """A completed cache record is invalid and cannot be trusted as evidence."""
 
 
 class AnalysisCache:
@@ -87,6 +92,8 @@ class ExtractorCacheEntry(BaseModel):
     bundle: FeatureBundle | None = None
     failure_code: str | None = None
     failure_reason: str | None = None
+    attempt_count: int = Field(default=1, ge=1)
+    failure_retryable: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @model_validator(mode="after")
@@ -100,6 +107,8 @@ class ExtractorCacheEntry(BaseModel):
                 raise ValueError("succeeded cache entries require a feature bundle")
             if self.failure_code is not None or self.failure_reason is not None:
                 raise ValueError("succeeded cache entries cannot contain a failure")
+            if self.failure_retryable:
+                raise ValueError("succeeded cache entries cannot be retryable")
             if self.bundle.audio_content_hash != self.audio_content_hash:
                 raise ValueError("bundle content hash must match the cache entry")
             if self.bundle.extractor_spec != self.extractor_spec:
@@ -108,6 +117,16 @@ class ExtractorCacheEntry(BaseModel):
                 raise ValueError("bundle window plan must match the cache entry")
         elif self.bundle is not None:
             raise ValueError("failed and skipped cache entries cannot contain a bundle")
+        if self.status in {
+            ExtractorCacheStatus.FAILED,
+            ExtractorCacheStatus.SKIPPED,
+        }:
+            if not self.failure_code or not self.failure_code.strip():
+                raise ValueError("failed and skipped cache entries require failure_code")
+            if not self.failure_reason or not self.failure_reason.strip():
+                raise ValueError("failed and skipped cache entries require failure_reason")
+        if self.status is ExtractorCacheStatus.SKIPPED and self.failure_retryable:
+            raise ValueError("skipped cache entries cannot be retryable")
         return self
 
     @property
@@ -151,7 +170,7 @@ class ExtractorCache:
             terminated = raw_line.endswith((b"\n", b"\r"))
             try:
                 entry = ExtractorCacheEntry.model_validate_json(stripped)
-            except (json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError) as exc:
                 if index == len(lines) - 1 and not terminated:
                     # A process may have stopped between writing bytes and the
                     # terminating newline. Discard only that incomplete tail.
@@ -159,7 +178,9 @@ class ExtractorCache:
                         fh.truncate(offset)
                     self._append_needs_newline = False
                     return
-                raise
+                raise CacheCorruptionError(
+                    f"invalid extractor cache record at line {index + 1}"
+                ) from exc
             self._by_key[entry.cache_key] = entry
             offset = next_offset
 
@@ -223,6 +244,8 @@ class ExtractorCache:
             if self._append_needs_newline:
                 fh.write("\n")
             fh.write(entry.model_dump_json() + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
         self._append_needs_newline = False
         self._by_key[entry.cache_key] = entry
         return entry
@@ -236,6 +259,7 @@ class ExtractorCache:
 
 __all__ = [
     "AnalysisCache",
+    "CacheCorruptionError",
     "ExtractorCache",
     "ExtractorCacheEntry",
     "ExtractorCacheStatus",

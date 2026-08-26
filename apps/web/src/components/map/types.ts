@@ -24,6 +24,7 @@ export type MapCanvasProps = {
   onHoverTrack?: (track: MapTrack | null) => void;
   onColorBy?: (value: ColorBy) => void;
   onWebgl?: (ok: boolean) => void;
+  fitRequestKey?: number;
   className?: string;
 };
 

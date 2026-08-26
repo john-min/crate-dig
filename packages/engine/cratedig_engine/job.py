@@ -323,8 +323,16 @@ class AnalyzeRunJob:
         row = self.store.get_analysis_run(analysis_run_id)
         if row is None:
             raise AnalyzeRunError(f"analysis_run not found: {analysis_run_id}")
+        if row.status == "completed":
+            log.info("analysis run %s is already completed", analysis_run_id)
+            return
 
-        bundles = self.store.list_library_tracks(row.library_id)
+        # Repository pagination/order is not part of the analysis identity.
+        # Stable ordering makes progress, artifacts, and clustering repeatable.
+        bundles = sorted(
+            self.store.list_library_tracks(row.library_id),
+            key=lambda item: item.track.id,
+        )
         try:
             backend = self.backend or self.backend_factory(
                 row.backend_name or "auto",
@@ -336,6 +344,15 @@ class AnalyzeRunJob:
 
         pipeline_version = row.pipeline_version or ANALYSIS_PIPELINE_VERSION
         feature_schema_version = row.feature_schema_version or FEATURE_SCHEMA_VERSION
+        if row.model_version and row.model_version != backend.model_version:
+            error = (
+                "analysis run identity mismatch: stored model "
+                f"{row.model_version!r}, resolved model {backend.model_version!r}"
+            )
+            self.store.mark_run_failed(
+                analysis_run_id, error, tracks_done=row.tracks_done
+            )
+            raise AnalyzeRunError(error)
         self.store.mark_run_running(
             analysis_run_id,
             tracks_total=len(bundles),
@@ -545,7 +562,10 @@ class AnalyzeRunJob:
         analysis_run_id: str,
         tracks_by_id: dict[str, TrackRow],
     ) -> None:
-        rows = self.store.list_run_embeddings(analysis_run_id)
+        rows = sorted(
+            self.store.list_run_embeddings(analysis_run_id),
+            key=lambda item: item[0],
+        )
         tracks: list[Track] = []
         features: list[TrackFeatures] = []
         embeddings: list[list[float]] = []
@@ -570,6 +590,7 @@ class AnalyzeRunJob:
                 name="solo",
                 suggested_moment="Main floor",
                 track_count=1,
+                id=_stable_cluster_id(analysis_run_id, 0),
             )
             member = ClusterMemberWrite(
                 track_id=tracks[0].track_id,
@@ -600,6 +621,7 @@ class AnalyzeRunJob:
                     name=item.cluster_name,
                     suggested_moment=item.suggested_moment,
                     track_count=0,
+                    id=_stable_cluster_id(analysis_run_id, item.cluster_id),
                 )
             cluster = clusters_by_index[item.cluster_id]
             cluster.track_count += 1
@@ -633,6 +655,15 @@ def _to_engine_track(row: TrackRow, location: str) -> Track:
         location=location,
         rating=row.rating,
         date_added=row.date_added,
+    )
+
+
+def _stable_cluster_id(analysis_run_id: str, cluster_index: int) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"cratedig:analysis:{analysis_run_id}:cluster:{cluster_index}",
+        )
     )
 
 

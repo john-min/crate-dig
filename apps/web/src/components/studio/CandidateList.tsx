@@ -29,13 +29,23 @@ export function CandidateList() {
   const playingId = s.playing?.id;
 
   return (
-    <section className="flex min-h-0 flex-col border-t border-line bg-ink" aria-label="Candidate tracks">
-      <div className="flex h-8 items-center justify-between px-4">
-        <h2 className="font-data text-[11.5px] tracking-[0.1em] text-paper-dim uppercase">{header}</h2>
+    <section
+      className="flex h-full min-h-0 flex-col overflow-hidden border-t border-line bg-ink"
+      aria-label="Candidate tracks"
+    >
+      <div className="flex h-9 shrink-0 items-center justify-between px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="truncate text-[12.5px] font-semibold text-paper">{header}</h2>
+          {!s.analysisReady ? (
+            <a href="/analysis" className="shrink-0 text-[11.5px] font-medium text-amber hover:text-paper">
+              Run analysis
+            </a>
+          ) : null}
+        </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="text-[12px] text-paper-dim hover:text-paper"
+            className="text-[11.5px] text-paper-dim hover:text-paper"
             aria-pressed={s.density === "compact"}
             onClick={() => s.setDensity(s.density === "compact" ? "comfortable" : "compact")}
           >
@@ -45,7 +55,7 @@ export function CandidateList() {
       </div>
       <div
         role="rowgroup"
-        className="hidden px-[var(--pad-panel)] font-data text-[11.5px] tracking-[0.1em] text-muted uppercase md:grid md:grid-cols-[2rem_minmax(0,1.5fr)_minmax(0,1fr)_3.25rem_2.75rem_4.5rem_5.5rem] md:gap-2"
+        className="hidden h-7 shrink-0 items-center px-[var(--pad-panel)] text-[11px] font-semibold tracking-[0.06em] text-muted uppercase md:grid md:grid-cols-[30px_minmax(0,3fr)_minmax(0,1.8fr)_54px_42px_minmax(0,1.4fr)_96px_68px] md:gap-2"
       >
         <span />
         <span>Title</span>
@@ -53,6 +63,7 @@ export function CandidateList() {
         <span>BPM</span>
         <span>Key</span>
         <span>Vibe</span>
+        <span>Match</span>
         <span />
       </div>
       <div

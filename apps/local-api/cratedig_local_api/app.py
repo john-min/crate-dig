@@ -12,7 +12,13 @@ from cratedig_engine.audio import hash_audio_file
 from cratedig_local_api import audio as playback
 from cratedig_local_api import db
 from cratedig_local_api.analysis_routes import create_analysis_router
+from cratedig_local_api.evaluation_routes import create_evaluation_router
+from cratedig_local_api.evaluation_service import EvaluationService
 from cratedig_local_api.repository import Repository
+from cratedig_local_api.rekordbox_metadata import (
+    load_rekordbox_usb_index,
+    probe_audio_tags,
+)
 from cratedig_local_api.runtime import (
     RepositoryAnalysisService,
     ensure_local_fast_manifest,
@@ -43,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     )
     app.include_router(create_analysis_router(RepositoryAnalysisService(repository)))
+    app.include_router(create_evaluation_router(EvaluationService(repository)))
 
     @app.get("/health")
     def health():
@@ -66,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except NotADirectoryError as exc:
             raise HTTPException(status_code=400, detail=f"Not a folder: {exc}") from exc
         with repository.synchronized():
+            rekordbox_index = load_rekordbox_usb_index(folder)
             library_id = db.get_or_create_library(
                 conn, body.library_name.strip() or "Local Music", "folder"
             )
@@ -81,8 +89,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         }
                     )
                     continue
-                artist, title = parse_filename(path)
+                artist, title = parse_filename(path, library_root=folder)
                 try:
+                    metadata = (
+                        rekordbox_index.metadata_for(path)
+                        if rekordbox_index is not None
+                        else None
+                    ) or probe_audio_tags(path)
+                    if metadata is not None:
+                        artist = metadata.artist or artist
+                        title = metadata.title or title
                     stat = path.stat()
                     audio_content_hash = hash_audio_file(path)
                     duplicates = db.find_tracks_by_content_hash(conn, audio_content_hash)
@@ -92,6 +108,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         title=title,
                         artist=artist,
                         location=str(path),
+                        album=metadata.album if metadata else "",
+                        genre=metadata.genre if metadata else "",
+                        label=metadata.label if metadata else "",
+                        bpm=metadata.bpm if metadata else None,
+                        musical_key=metadata.musical_key if metadata else "",
+                        duration_sec=metadata.duration_sec if metadata else None,
+                        rating=metadata.rating if metadata else None,
+                        date_added=metadata.date_added if metadata else "",
+                        rekordbox_track_id=(
+                            metadata.rekordbox_track_id if metadata else ""
+                        ),
+                        bpm_source=metadata.bpm_source if metadata else "",
+                        key_source=metadata.key_source if metadata else "",
                         audio_content_hash=audio_content_hash,
                         file_size_bytes=stat.st_size,
                         file_mtime_ns=stat.st_mtime_ns,
@@ -177,8 +206,7 @@ def main() -> None:
 
     cfg = Settings.from_env()
     uvicorn.run(
-        "cratedig_local_api.app:create_app",
-        factory=True,
+        create_app(cfg),
         host=cfg.host,
         port=cfg.port,
         reload=False,

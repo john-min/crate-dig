@@ -70,3 +70,19 @@ def test_reduce_embeddings_l2_normalized():
     reduced = reduce_embeddings(emb, dim=6)
     assert reduced.shape == (20, 6)
     assert np.allclose(np.linalg.norm(reduced, axis=1), 1.0, atol=1e-5)
+
+
+def test_two_track_corpus_still_produces_map_coordinates():
+    emb, tracks, features = _synthetic(n=2, groups=2, dim=4)
+
+    assignments, _reduced = cluster_embeddings(
+        emb,
+        tracks,
+        features,
+        min_cluster_size=2,
+        reduced_dim=4,
+    )
+
+    assert len(assignments) == 2
+    assert all(np.isfinite(item.umap_x) for item in assignments)
+    assert all(np.isfinite(item.umap_y) for item in assignments)
