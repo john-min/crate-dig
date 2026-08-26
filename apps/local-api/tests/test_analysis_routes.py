@@ -138,12 +138,17 @@ class FakeAnalysisService:
         return {**value, "run_id": run_id}
 
     def list_neighbors(
-        self, track_id: str, *, run_id: str | None = None, limit: int = 25
+        self,
+        track_id: str,
+        *,
+        run_id: str | None = None,
+        limit: int = 25,
+        channel: str | None = None,
     ):
         values = self.neighbors.get(track_id)
         if values is None:
             return None
-        return values[:limit]
+        return [{**value, "requested_channel": channel} for value in values[:limit]]
 
 
 @pytest.fixture
@@ -293,12 +298,16 @@ def test_retry_maps_success_missing_ceiling_and_terminal_failures(client: TestCl
 
 def test_track_analysis_and_neighbors_include_query_context(client: TestClient):
     analysis = client.get("/tracks/track-1/analysis?run_id=run-1")
-    neighbors = client.get("/tracks/track-1/neighbors?run_id=run-1&limit=1")
+    neighbors = client.get(
+        "/tracks/track-1/neighbors?run_id=run-1&channel=librosa-zscore-v1&limit=1"
+    )
 
     assert analysis.status_code == 200
     assert analysis.json()["run_id"] == "run-1"
     assert neighbors.status_code == 200
     assert neighbors.json()["limit"] == 1
+    assert neighbors.json()["channel"] == "librosa-zscore-v1"
+    assert neighbors.json()["neighbors"][0]["requested_channel"] == "librosa-zscore-v1"
     assert neighbors.json()["neighbors"][0]["reason_codes"] == [
         "similar_global_style"
     ]

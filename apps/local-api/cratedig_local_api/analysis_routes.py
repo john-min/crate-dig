@@ -77,6 +77,7 @@ class AnalysisService(Protocol):
         *,
         run_id: str | None = None,
         limit: int = 25,
+        channel: str | None = None,
     ) -> Sequence[JsonObject] | None: ...
 
 
@@ -234,14 +235,18 @@ def create_analysis_router(service: AnalysisService) -> APIRouter:
     def get_track_neighbors(
         track_id: str,
         run_id: str | None = None,
+        channel: Annotated[str | None, Query(min_length=1)] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ):
-        neighbors = service.list_neighbors(track_id, run_id=run_id, limit=limit)
+        neighbors = service.list_neighbors(
+            track_id, run_id=run_id, channel=channel, limit=limit
+        )
         if neighbors is None:
             _raise_http(AnalysisNotFoundError("Track was not found"))
         return {
             "track_id": track_id,
             "run_id": run_id,
+            "channel": channel,
             "limit": limit,
             "neighbors": list(neighbors),
         }

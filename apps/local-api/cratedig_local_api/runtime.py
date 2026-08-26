@@ -137,10 +137,17 @@ class RepositoryAnalysisService:
             return self.repository.get_track_analysis(track_id, run_id=run_id)
 
     def list_neighbors(
-        self, track_id: str, *, run_id: str | None = None, limit: int = 25
+        self,
+        track_id: str,
+        *,
+        run_id: str | None = None,
+        limit: int = 25,
+        channel: str | None = None,
     ):
         with self.repository.synchronized():
-            return self.repository.list_neighbors(track_id, run_id=run_id, limit=limit)
+            return self.repository.list_neighbors(
+                track_id, run_id=run_id, channel=channel, limit=limit
+            )
 
 
 __all__ = [
