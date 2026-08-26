@@ -361,6 +361,37 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "create index tracks_musical_key_idx on tracks (musical_key)",
         ),
     ),
+    Migration(
+        6,
+        "track_metadata_sources",
+        (
+            """
+            create table track_metadata_sources (
+              id text primary key,
+              track_id text not null references tracks (id) on delete cascade,
+              source_type text not null,
+              source_ref text not null default '',
+              source_track_id text not null default '',
+              match_method text not null,
+              title text not null default '',
+              artist text not null default '',
+              album text not null default '',
+              genre text not null default '',
+              label text not null default '',
+              bpm real,
+              musical_key text not null default '',
+              duration_sec real,
+              rating integer,
+              date_added text not null default '',
+              imported_at text not null,
+              updated_at text not null,
+              unique (track_id, source_type, source_ref, source_track_id)
+            )
+            """,
+            "create index track_metadata_sources_track_idx on track_metadata_sources (track_id, source_type)",
+            "create index track_metadata_sources_source_track_idx on track_metadata_sources (source_type, source_track_id)",
+        ),
+    ),
 )
 
 

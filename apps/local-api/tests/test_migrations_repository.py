@@ -94,6 +94,7 @@ def test_connect_configures_sqlite_and_migrates_an_existing_database(tmp_path: P
             "evaluation_neighbor_results",
             "evaluation_run_metrics",
             "similarity_judgments",
+            "track_metadata_sources",
         }.issubset(tables)
         assert conn.execute("select title from tracks where id = 'track-1'").fetchone()[0] == "Before migrations"
         metadata = conn.execute(

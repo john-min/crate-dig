@@ -12,6 +12,7 @@ from cratedig_engine.audio import hash_audio_file
 from cratedig_local_api import audio as playback
 from cratedig_local_api import db
 from cratedig_local_api.analysis_routes import create_analysis_router
+from cratedig_local_api.csv_metadata import import_rekordbox_tracks_csv
 from cratedig_local_api.evaluation_routes import create_evaluation_router
 from cratedig_local_api.evaluation_service import EvaluationService
 from cratedig_local_api.repository import Repository
@@ -30,6 +31,11 @@ from cratedig_local_api.settings import Settings
 class FolderImportBody(BaseModel):
     folder_path: str = Field(min_length=1)
     library_name: str = "Local Music"
+
+
+class CsvMetadataImportBody(BaseModel):
+    csv_path: str = Field(min_length=1)
+    source_ref: str | None = None
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -161,6 +167,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="Library not found")
             tracks = db.list_tracks(conn, library_id)
         return {"tracks": [_public_track(row) for row in tracks]}
+
+    @app.post("/libraries/{library_id}/metadata/import-csv")
+    def import_csv_metadata(library_id: str, body: CsvMetadataImportBody):
+        source = Path(body.csv_path).expanduser()
+        if not source.is_file():
+            raise HTTPException(status_code=400, detail=f"CSV not found: {source}")
+        try:
+            with repository.synchronized():
+                summary = import_rekordbox_tracks_csv(
+                    conn,
+                    library_id=library_id,
+                    csv_path=source,
+                    source_ref=body.source_ref,
+                )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return summary.as_dict()
 
     @app.get("/tracks")
     def all_tracks():

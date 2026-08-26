@@ -4,6 +4,10 @@ djvibe_clap/
 **/djvibe_data/
 **/djvibe_clap/
 
+# private DJ-library exports (may contain personal paths and catalog metadata)
+data/private/
+data/reference/**/*.csv
+
 # generated analysis artifacts
 *.npy
 *.npz

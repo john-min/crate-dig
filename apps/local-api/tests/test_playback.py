@@ -106,6 +106,37 @@ def test_folder_import_infers_artist_from_dj_export_hierarchy(
     assert by_title["Dancing Stuff"]["created_at"]
 
 
+def test_imports_legacy_csv_metadata_for_one_library(client: TestClient, tmp_path: Path):
+    folder = tmp_path / "music"
+    folder.mkdir()
+    write_silence_wav(folder / "Anais Kerr - Salt Flats.wav")
+    imported = client.post(
+        "/imports/folder",
+        json={"folder_path": str(folder), "library_name": "CSV library"},
+    ).json()
+    csv_path = tmp_path / "tracks.csv"
+    csv_path.write_text(
+        "track_id,title,artist,album,genre,bpm,key,duration_sec,location,rating,date_added\n"
+        "42,Salt Flats,Anais Kerr,Low Water,Dub Techno,118,5A,240,legacy,4,2026-08-01\n"
+    )
+
+    response = client.post(
+        f"/libraries/{imported['library_id']}/metadata/import-csv",
+        json={"csv_path": str(csv_path), "source_ref": "test/tracks.csv"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["matched"] == 1
+    track = client.get(
+        f"/libraries/{imported['library_id']}/tracks"
+    ).json()["tracks"][0]
+    assert track["bpm"] == 118.0
+    assert track["key"] == "5A"
+    assert track["genre"] == "Dub Techno"
+    assert track["bpm_source"] == "rekordbox_csv"
+    assert track["key_source"] == "rekordbox_csv"
+
+
 def test_rejects_arbitrary_paths(client: TestClient, tmp_path: Path):
     sneaky = tmp_path / "outside.wav"
     write_silence_wav(sneaky)
