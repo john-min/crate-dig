@@ -251,12 +251,32 @@ class EvaluationService:
         configuration_ids = list(dict.fromkeys(configuration_ids))
         if not configuration_ids:
             raise ValueError("at least one configuration is required")
+        if requested_k < 1:
+            raise ValueError("requested_k must be positive")
         with self.repository.write_transaction():
             evaluation_set = self.conn.execute(
                 "select * from evaluation_sets where id = ?", (evaluation_set_id,)
             ).fetchone()
             if evaluation_set is None:
                 raise NotFoundError(f"evaluation set not found: {evaluation_set_id}")
+            placeholders = ",".join("?" for _ in configuration_ids)
+            configurations = self.conn.execute(
+                f"select * from evaluation_configurations where evaluation_set_id = ? and id in ({placeholders})",
+                (evaluation_set_id, *configuration_ids),
+            ).fetchall()
+            if len(configurations) != len(configuration_ids):
+                raise ValueError("one or more configurations do not belong to the evaluation set")
+            anchors = self.conn.execute(
+                "select * from evaluation_anchors where evaluation_set_id = ? order by created_at, id",
+                (evaluation_set_id,),
+            ).fetchall()
+            corpus = {
+                str(row["track_id"])
+                for row in self.conn.execute(
+                    "select track_id from evaluation_set_tracks where evaluation_set_id = ?",
+                    (evaluation_set_id,),
+                ).fetchall()
+            }
             existing = self.conn.execute(
                 "select * from evaluation_runs where idempotency_key = ?", (idempotency_key,)
             ).fetchone()
@@ -269,19 +289,14 @@ class EvaluationService:
                 )
                 if prior != signature:
                     raise ConflictError("idempotency key is bound to a different evaluation run")
+                self._require_evaluation_results_complete(
+                    str(existing["id"]),
+                    configurations=configurations,
+                    anchors=anchors,
+                    corpus=corpus,
+                    requested_k=requested_k,
+                )
                 return self._run(existing)
-
-            placeholders = ",".join("?" for _ in configuration_ids)
-            configurations = self.conn.execute(
-                f"select * from evaluation_configurations where evaluation_set_id = ? and id in ({placeholders})",
-                (evaluation_set_id, *configuration_ids),
-            ).fetchall()
-            if len(configurations) != len(configuration_ids):
-                raise ValueError("one or more configurations do not belong to the evaluation set")
-            anchors = self.conn.execute(
-                "select * from evaluation_anchors where evaluation_set_id = ? order by created_at, id",
-                (evaluation_set_id,),
-            ).fetchall()
             run_id = str(uuid.uuid4())
             self.conn.execute(
                 """
@@ -303,16 +318,9 @@ class EvaluationService:
                     now,
                 ),
             )
-            corpus = {
-                str(row["track_id"])
-                for row in self.conn.execute(
-                    "select track_id from evaluation_set_tracks where evaluation_set_id = ?",
-                    (evaluation_set_id,),
-                ).fetchall()
-            }
             for anchor in anchors:
                 explicit_pool = set(_load(anchor["candidate_pool_json"], []))
-                pool = explicit_pool or corpus
+                pool = set(explicit_pool or corpus)
                 pool.discard(str(anchor["track_id"]))
                 for configuration in configurations:
                     self._materialize_neighbors(
@@ -324,6 +332,13 @@ class EvaluationService:
                         requested_k=requested_k,
                         now=now,
                     )
+            self._require_evaluation_results_complete(
+                run_id,
+                configurations=configurations,
+                anchors=anchors,
+                corpus=corpus,
+                requested_k=requested_k,
+            )
             row = self.conn.execute(
                 "select * from evaluation_runs where id = ?", (run_id,)
             ).fetchone()
@@ -755,23 +770,33 @@ class EvaluationService:
         candidate_pool: set[str],
         requested_k: int,
         now: str,
-    ) -> None:
+    ) -> int:
         analysis_run_id = configuration["analysis_run_id"]
         if not analysis_run_id:
-            return
+            raise ConflictError(
+                f"evaluation configuration {configuration['id']!r} has no analysis run"
+            )
         rows = self.conn.execute(
             """
             select * from similarity_neighbors
             where analysis_run_id = ? and source_track_id = ? and channel = ?
-            order by rank limit ?
+            order by rank, target_track_id
             """,
-            (analysis_run_id, anchor_track_id, configuration["channel"], requested_k * 4),
+            (analysis_run_id, anchor_track_id, configuration["channel"]),
         ).fetchall()
+        expected = min(requested_k, len(candidate_pool))
+        eligible = [
+            row for row in rows if str(row["target_track_id"]) in candidate_pool
+        ]
+        if len(eligible) < expected:
+            raise ConflictError(
+                "incomplete similarity candidates for "
+                f"anchor {anchor_track_id!r}, configuration {configuration['id']!r}: "
+                f"expected {expected}, found {len(eligible)}"
+            )
         inserted = 0
-        for row in rows:
+        for row in eligible:
             candidate = str(row["target_track_id"])
-            if candidate not in candidate_pool:
-                continue
             explanation = _load(row["explanation_json"], {})
             inserted += 1
             self.conn.execute(
@@ -807,6 +832,47 @@ class EvaluationService:
             )
             if inserted >= requested_k:
                 break
+        return inserted
+
+    def _require_evaluation_results_complete(
+        self,
+        evaluation_run_id: str,
+        *,
+        configurations: Sequence[sqlite3.Row],
+        anchors: Sequence[sqlite3.Row],
+        corpus: set[str],
+        requested_k: int,
+    ) -> None:
+        """Refuse completed/replayed evaluation runs with partial rankings."""
+
+        for anchor in anchors:
+            anchor_track_id = str(anchor["track_id"])
+            explicit_pool = set(_load(anchor["candidate_pool_json"], []))
+            candidate_pool = set(explicit_pool or corpus)
+            candidate_pool.discard(anchor_track_id)
+            expected = min(requested_k, len(candidate_pool))
+            for configuration in configurations:
+                rows = self.conn.execute(
+                    """
+                    select candidate_track_id, rank
+                    from evaluation_neighbor_results
+                    where evaluation_run_id = ? and anchor_track_id = ?
+                      and configuration_id = ?
+                    order by rank
+                    """,
+                    (evaluation_run_id, anchor_track_id, configuration["id"]),
+                ).fetchall()
+                ranks = [int(row["rank"]) for row in rows]
+                candidates = {str(row["candidate_track_id"]) for row in rows}
+                if (
+                    len(rows) != expected
+                    or ranks != list(range(1, expected + 1))
+                    or not candidates.issubset(candidate_pool)
+                ):
+                    raise ConflictError(
+                        "evaluation run has incomplete frozen candidates for "
+                        f"anchor {anchor_track_id!r}, configuration {configuration['id']!r}"
+                    )
 
     def _neighbor_groups(
         self,

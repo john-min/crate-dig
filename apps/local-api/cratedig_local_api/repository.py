@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 import sys
 import threading
@@ -1132,6 +1133,246 @@ class Repository:
             params,
         ).fetchall()
         return [_row(row) or {} for row in rows]
+
+    def materialize_exact_neighbors(
+        self,
+        analysis_run_id: str,
+        *,
+        channel: str = "global",
+        embedding_key: str = "retrieval:track",
+        top_k: int = 25,
+        normalization: str = "none",
+    ) -> dict[str, Any]:
+        """Atomically replace one run/channel with exact cosine neighbors.
+
+        Only track-scoped retrieval evidence participates.  The operation is
+        deliberately strict: ambiguous, malformed, non-finite, zero-norm, or
+        dimension/model-incompatible vectors abort the transaction instead of
+        leaving a partial cache that downstream evaluation could mistake for a
+        complete ranking.
+        """
+
+        channel = channel.strip()
+        embedding_key = embedding_key.strip()
+        if not channel:
+            raise ValueError("channel is required")
+        if not embedding_key:
+            raise ValueError("embedding_key is required")
+        if top_k < 1 or top_k > 500:
+            raise ValueError("top_k must be between 1 and 500")
+        if normalization not in {"none", "zscore-v1"}:
+            raise ValueError("normalization must be 'none' or 'zscore-v1'")
+
+        now = utc_now()
+        with self._write():
+            run = self.conn.execute(
+                "select status from analysis_runs where id = ?", (analysis_run_id,)
+            ).fetchone()
+            if run is None:
+                raise NotFoundError(f"analysis run not found: {analysis_run_id}")
+            if run["status"] != "completed":
+                raise ConflictError(
+                    "similarity neighbors can only be materialized from a completed analysis run"
+                )
+
+            rows = self.conn.execute(
+                """
+                select track_id, embedding_key, model_name, model_version,
+                       pooling_strategy, dimensions, dtype, embedding_blob
+                from track_embeddings
+                where analysis_run_id = ? and scope = 'track' and embedding_key = ?
+                order by track_id, id
+                """,
+                (analysis_run_id, embedding_key),
+            ).fetchall()
+            if not rows:
+                raise ConflictError(
+                    f"analysis run has no track-scoped {embedding_key!r} embeddings"
+                )
+
+            by_track: dict[str, sqlite3.Row] = {}
+            for row in rows:
+                track_id = str(row["track_id"])
+                if track_id in by_track:
+                    raise ValueError(
+                        f"track {track_id!r} has multiple {embedding_key!r} embeddings"
+                    )
+                by_track[track_id] = row
+
+            identities = {
+                (
+                    str(row["model_name"]),
+                    str(row["model_version"]),
+                    row["pooling_strategy"],
+                    int(row["dimensions"]),
+                )
+                for row in rows
+            }
+            if len(identities) != 1:
+                raise ValueError(
+                    "retrieval embeddings must have one model, version, pooling strategy, and dimension"
+                )
+            model_name, model_version, pooling_strategy, dimensions = next(iter(identities))
+
+            raw_vectors: dict[str, tuple[float, ...]] = {}
+            for track_id, row in by_track.items():
+                payload = row["embedding_blob"]
+                if isinstance(payload, memoryview):
+                    payload = payload.tobytes()
+                if not isinstance(payload, (bytes, bytearray)):
+                    raise ValueError(f"retrieval embedding for track {track_id!r} is not binary")
+                payload = bytes(payload)
+                if row["dtype"] not in {"float32", "float32-le"}:
+                    raise ValueError(
+                        f"retrieval embedding for track {track_id!r} has unsupported dtype {row['dtype']!r}"
+                    )
+                if len(payload) != dimensions * 4:
+                    raise ValueError(
+                        f"retrieval embedding for track {track_id!r} has an invalid byte length"
+                    )
+                values = array("f")
+                values.frombytes(payload)
+                if sys.byteorder != "little":
+                    values.byteswap()
+                if any(not math.isfinite(value) for value in values):
+                    raise ValueError(
+                        f"retrieval embedding for track {track_id!r} contains non-finite values"
+                    )
+                raw_vectors[track_id] = tuple(values)
+
+            zero_variance_dimensions = 0
+            transformed_vectors = raw_vectors
+            if normalization == "zscore-v1":
+                ordered_ids = sorted(raw_vectors)
+                corpus_size = len(ordered_ids)
+                means = tuple(
+                    math.fsum(raw_vectors[track_id][index] for track_id in ordered_ids)
+                    / corpus_size
+                    for index in range(dimensions)
+                )
+                variances = tuple(
+                    math.fsum(
+                        (raw_vectors[track_id][index] - means[index]) ** 2
+                        for track_id in ordered_ids
+                    )
+                    / corpus_size
+                    for index in range(dimensions)
+                )
+                if any(
+                    not math.isfinite(mean) or not math.isfinite(variance)
+                    for mean, variance in zip(means, variances, strict=True)
+                ):
+                    raise ValueError("zscore-v1 produced non-finite corpus statistics")
+                standard_deviations = tuple(math.sqrt(variance) for variance in variances)
+                zero_variance_dimensions = sum(
+                    deviation == 0.0 for deviation in standard_deviations
+                )
+                transformed_vectors = {
+                    track_id: tuple(
+                        0.0
+                        if standard_deviations[index] == 0.0
+                        else (value - means[index]) / standard_deviations[index]
+                        for index, value in enumerate(values)
+                    )
+                    for track_id, values in raw_vectors.items()
+                }
+
+            vectors: dict[str, tuple[float, ...]] = {}
+            for track_id, values in transformed_vectors.items():
+                if any(not math.isfinite(value) for value in values):
+                    raise ValueError(
+                        f"retrieval embedding for track {track_id!r} contains non-finite "
+                        f"values after {normalization} normalization"
+                    )
+                norm = math.sqrt(math.fsum(value * value for value in values))
+                if not math.isfinite(norm) or norm == 0.0:
+                    raise ValueError(
+                        f"retrieval embedding for track {track_id!r} has zero or invalid norm "
+                        f"after {normalization} normalization"
+                    )
+                vectors[track_id] = tuple(value / norm for value in values)
+
+            # This delete plus all inserts share the same IMMEDIATE transaction.
+            # A failed rerun therefore preserves the prior complete cache.
+            self.conn.execute(
+                "delete from similarity_neighbors where analysis_run_id = ? and channel = ?",
+                (analysis_run_id, channel),
+            )
+            track_ids = sorted(vectors)
+            inserted = 0
+            for source_track_id in track_ids:
+                source = vectors[source_track_id]
+                scores = []
+                for target_track_id in track_ids:
+                    if target_track_id == source_track_id:
+                        continue
+                    score = math.fsum(
+                        left * right
+                        for left, right in zip(
+                            source, vectors[target_track_id], strict=True
+                        )
+                    )
+                    # Floating-point roundoff can escape the cosine range by a
+                    # few ulps.  Clamping keeps score/distance contracts valid.
+                    score = min(1.0, max(-1.0, score))
+                    scores.append((target_track_id, score))
+                scores.sort(key=lambda item: (-item[1], item[0]))
+                selected = scores[:top_k]
+                self.conn.executemany(
+                    """
+                    insert into similarity_neighbors (
+                      analysis_run_id, source_track_id, target_track_id, channel,
+                      rank, distance, score, explanation_json, created_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            analysis_run_id,
+                            source_track_id,
+                            target_track_id,
+                            channel,
+                            rank,
+                            1.0 - score,
+                            score,
+                            _canonical_json(
+                                {
+                                    "components": {channel: score},
+                                    "reason_codes": [],
+                                    "provenance": {
+                                        "algorithm": "exact_cosine",
+                                        "embedding_key": embedding_key,
+                                        "model_name": model_name,
+                                        "model_version": model_version,
+                                        "pooling_strategy": pooling_strategy,
+                                        "dimensions": dimensions,
+                                        "normalization": normalization,
+                                        "normalization_corpus_size": len(vectors),
+                                        "normalization_zero_variance_dimensions": zero_variance_dimensions,
+                                    },
+                                }
+                            ),
+                            now,
+                        )
+                        for rank, (target_track_id, score) in enumerate(
+                            selected, start=1
+                        )
+                    ],
+                )
+                inserted += len(selected)
+
+        return {
+            "analysis_run_id": analysis_run_id,
+            "channel": channel,
+            "embedding_key": embedding_key,
+            "top_k": top_k,
+            "source_count": len(vectors),
+            "neighbor_count": inserted,
+            "model_name": model_name,
+            "model_version": model_version,
+            "dimensions": dimensions,
+            "normalization": normalization,
+            "normalization_zero_variance_dimensions": zero_variance_dimensions,
+        }
 
     def _refresh_run(self, run_id: str, now: str) -> None:
         counts = self.conn.execute(

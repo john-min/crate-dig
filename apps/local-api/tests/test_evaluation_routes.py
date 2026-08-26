@@ -256,3 +256,61 @@ def test_create_set_rejects_cross_library_tracks(evaluation_harness, tmp_path: P
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "evaluation_request_invalid"
+
+
+@pytest.mark.parametrize("remaining", [0, 1])
+def test_evaluation_run_fails_closed_when_materialized_candidates_are_incomplete(
+    evaluation_harness, remaining: int
+):
+    client, conn, library_id, track_ids, analysis_run_id = evaluation_harness
+    created = create_set(client, library_id, track_ids, analysis_run_id)
+    set_id = created["id"]
+    configuration_id = created["configurations"][0]["id"]
+    conn.execute(
+        """
+        delete from similarity_neighbors
+        where analysis_run_id = ? and source_track_id = ? and rank > ?
+        """,
+        (analysis_run_id, track_ids[0], remaining),
+    )
+    conn.commit()
+
+    response = client.post(
+        f"/evaluation-sets/{set_id}/runs",
+        json={
+            "configuration_ids": [configuration_id],
+            "requested_k": 2,
+            "idempotency_key": f"incomplete-evaluation-{remaining}",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "evaluation_state_conflict"
+    assert "incomplete similarity candidates" in response.json()["detail"]["message"]
+    assert conn.execute("select count(*) from evaluation_runs").fetchone()[0] == 0
+
+
+def test_evaluation_run_replay_rejects_a_damaged_frozen_ranking(evaluation_harness):
+    client, conn, library_id, track_ids, analysis_run_id = evaluation_harness
+    created = create_set(client, library_id, track_ids, analysis_run_id)
+    set_id = created["id"]
+    configuration_id = created["configurations"][0]["id"]
+    payload = {
+        "configuration_ids": [configuration_id],
+        "requested_k": 2,
+        "idempotency_key": "evaluation-damaged-replay",
+    }
+    first = client.post(f"/evaluation-sets/{set_id}/runs", json=payload)
+    assert first.status_code == 201
+    conn.execute(
+        """
+        delete from evaluation_neighbor_results
+        where evaluation_run_id = ? and rank = 2
+        """,
+        (first.json()["id"],),
+    )
+    conn.commit()
+
+    replay = client.post(f"/evaluation-sets/{set_id}/runs", json=payload)
+    assert replay.status_code == 409
+    assert "incomplete frozen candidates" in replay.json()["detail"]["message"]

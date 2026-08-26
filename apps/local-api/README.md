@@ -54,6 +54,39 @@ enabled. Cache hits copy immutable typed evidence into the requesting run and
 record the source stage in `cache_hit_from_stage_id`; their terminal lifecycle
 status remains `succeeded`.
 
+After a retrieval analysis run completes, materialize its deterministic exact
+cosine cache from track-scoped `retrieval:track` embeddings:
+
+```bash
+cratedig-materialize-neighbors --run-id <analysis-run-id> --top-k 25
+```
+
+The command atomically replaces only that run's `global` channel. Use
+`--channel` to maintain an independently versioned channel or
+`--embedding-key` for an explicitly named track-level retrieval role. Invalid,
+zero-norm, non-finite, ambiguous, or dimension-incompatible vectors abort the
+operation and preserve the previous cache. Evaluation runs likewise refuse to
+complete when any requested anchor/configuration candidate list is absent or
+shorter than the available corpus requires.
+
+Learned embeddings retain raw cosine behavior through the default
+`--normalization none`. For physical feature vectors with common offsets or
+incompatible dimension scales, materialize a separate, explicitly named
+channel with the versioned corpus transform:
+
+```bash
+cratedig-materialize-neighbors \
+  --run-id <analysis-run-id> \
+  --channel librosa-zscore-v1 \
+  --normalization zscore-v1 \
+  --top-k 25
+```
+
+`zscore-v1` uses corpus population mean and standard deviation per dimension,
+maps zero-variance dimensions to zero, and then L2-normalizes each transformed
+track vector before exact cosine ranking. The method, corpus size, and number
+of zero-variance dimensions are persisted in each neighbor's provenance.
+
 Current boundary: stages are claimed per extractor. Keep `local-fast@1`
 single-extractor until track-level batch claims can share one `DecodedAudio`
 across every extractor in a multi-model manifest. The worker does not yet renew
