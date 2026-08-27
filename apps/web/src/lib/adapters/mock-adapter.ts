@@ -21,7 +21,16 @@ import { getMockLibrary } from "../studio/mock-library";
 const MOCK_LIBRARY_ID = "mock-library";
 const PREVIEW_LIBRARY_ID = "preview-demo";
 
-function fromPreviewCatalogTrack(track: { id: string; title: string; artist: string }): Track {
+type PreviewCatalogTrack = {
+  id: string;
+  title: string;
+  artist: string;
+  bpm?: number | null;
+  musicalKey?: string;
+  studio?: Record<string, unknown>;
+};
+
+function fromPreviewCatalogTrack(track: PreviewCatalogTrack): Track {
   return {
     id: track.id,
     libraryId: PREVIEW_LIBRARY_ID,
@@ -29,11 +38,14 @@ function fromPreviewCatalogTrack(track: { id: string; title: string; artist: str
     artist: track.artist,
     readiness: "ready_fast",
     previewUrl: null,
+    bpm: track.bpm ?? null,
+    musicalKey: track.musicalKey,
     studio: {
       previewState: "ready",
       analysisStatus: "ok",
       suggestedMoment: "R2 demo",
       clusterName: "Unanalyzed",
+      ...track.studio,
     },
   } as Track;
 }
@@ -107,7 +119,7 @@ export class MockAdapter implements MockRuntimeAdapter {
       throw new Error("Preview R2 catalog is unavailable.");
     }
     const body = (await response.json()) as {
-      tracks?: { id: string; title: string; artist: string }[];
+      tracks?: PreviewCatalogTrack[];
     };
     const tracks = (body.tracks ?? []).map(fromPreviewCatalogTrack);
     this.studioTracks = tracks.map((track) => mapTrackToStudio(track));

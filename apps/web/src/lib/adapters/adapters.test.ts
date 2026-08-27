@@ -75,7 +75,25 @@ describe("MockAdapter", () => {
         const url = String(input);
         if (url.includes("/catalog")) {
           return jsonResponse({
-            tracks: [{ id: "r2-abc", title: "That Beat", artist: "Acrobat" }],
+            tracks: [
+              {
+                id: "r2-abc",
+                title: "That Beat",
+                artist: "Acrobat",
+                bpm: 125,
+                musicalKey: "9A",
+                studio: {
+                  key: "9A",
+                  genre: "Progressive House",
+                  mood: "euphoric",
+                  energy: "peak",
+                  energyScore: 7,
+                  tags: ["Progressive House", "peak"],
+                  analysisStatus: "ok",
+                  previewState: "ready",
+                },
+              },
+            ],
           });
         }
         if (url.includes("/playback") && url.includes("r2-abc")) {
@@ -88,7 +106,14 @@ describe("MockAdapter", () => {
     expect(libraries[0]?.source).toBe("demo");
     const tracks = await adapter.listTracks();
     expect(tracks).toHaveLength(1);
-    expect(tracks[0]).toMatchObject({ id: "r2-abc", title: "That Beat", artist: "Acrobat" });
+    expect(tracks[0]).toMatchObject({
+      id: "r2-abc",
+      title: "That Beat",
+      artist: "Acrobat",
+      bpm: 125,
+      musicalKey: "9A",
+      studio: { energy: "peak", mood: "euphoric", key: "9A" },
+    });
     expect(await adapter.getPlaybackUrl("r2-abc")).toEqual({
       url: "https://r2.example/signed",
       expiresAt: "t",

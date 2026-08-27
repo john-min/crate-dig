@@ -1,7 +1,12 @@
 import { notConfigured, notFound } from "@/lib/cloud/http";
 import { getPublicAppMode } from "@/lib/env";
 import { loadPreviewCatalog } from "@/lib/preview/r2-library";
+import {
+  previewCatalogTrackFromTags,
+  type PreviewTagRecord,
+} from "@/lib/preview/studio-from-tags";
 import { getR2Config } from "@/lib/r2/env";
+import tagCatalog from "@/data/preview-track-studio.json";
 
 export const runtime = "nodejs";
 
@@ -21,7 +26,10 @@ export async function GET() {
     );
   }
   const entries = await loadPreviewCatalog();
+  const tagsById = tagCatalog as Record<string, PreviewTagRecord>;
   return Response.json({
-    tracks: entries.map(({ id, title, artist }) => ({ id, title, artist })),
+    tracks: entries.map((entry) =>
+      previewCatalogTrackFromTags(entry, tagsById[entry.id] ?? {}),
+    ),
   });
 }

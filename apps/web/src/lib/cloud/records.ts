@@ -8,6 +8,7 @@ import {
 import type { Library, Track } from "@crate-dig/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playback-object";
+import { studioFieldsFromPreviewTags } from "@/lib/preview/studio-from-tags";
 
 type TrackRow = {
   id: string;
@@ -19,6 +20,8 @@ type TrackRow = {
   label: string | null;
   bpm: number | null;
   key: string | null;
+  rating: number | null;
+  energy_rating: number | null;
   duration_sec: number | null;
   created_at: string;
   audio_objects?: { id: string; kind: string; object_key: string }[] | null;
@@ -84,7 +87,7 @@ function mapTrackRow(row: TrackRow): Track {
     right.created_at.localeCompare(left.created_at),
   )[0];
   const embeddings = row.track_embeddings ?? [];
-  const readiness = readinessFromAnalysisEvidence({
+  const analysisReadiness = readinessFromAnalysisEvidence({
     state:
       latestFeature?.status === "ok"
         ? "completed"
@@ -96,6 +99,19 @@ function mapTrackRow(row: TrackRow): Track {
   });
   const audioObjects = row.audio_objects ?? [];
   const hasAudio = hasPlayableAudioObject(audioObjects);
+  const studio = studioFieldsFromPreviewTags({
+    genre: row.genre ?? "",
+    label: row.label ?? "",
+    key: row.key || undefined,
+    bpm: row.bpm ?? undefined,
+    energyLevel: row.energy_rating ?? undefined,
+  });
+  const readiness =
+    analysisReadiness === "failed"
+      ? analysisReadiness
+      : hasAudio || studio.analysisStatus === "ok"
+        ? "ready_fast"
+        : analysisReadiness;
   // Signed URLs expire; the client fetches a fresh GET via /playback on play.
   const previewUrl = null;
   return {
@@ -104,32 +120,28 @@ function mapTrackRow(row: TrackRow): Track {
     title: row.title || "Untitled",
     artist: row.artist || "Unknown artist",
     bpm: row.bpm,
-    musicalKey: row.key || undefined,
+    musicalKey: studio.key || row.key || undefined,
     previewUrl,
     createdAt: row.created_at,
     readiness,
     studio: {
-      key: row.key,
-      genre: row.genre ?? "",
-      label: row.label ?? "",
+      ...studio,
+      suggestedMoment: studio.genre ? studio.suggestedMoment : "Cloud upload",
+      clusterName: studio.genre || (hasAudio ? "Uploaded" : "Unanalyzed"),
       durationSec: row.duration_sec ?? 0,
-      mood: "warm",
-      energy: "medium",
-      textures: ["minimal"],
       cluster: 0,
-      clusterName: hasAudio ? "Uploaded" : "Unanalyzed",
-      suggestedMoment: "Cloud upload",
-      tags: ["cloud"],
-      analysisStatus: analysisStatusFromReadiness(readiness, !row.artist.trim()),
+      analysisStatus:
+        studio.analysisStatus === "ok"
+          ? "ok"
+          : analysisStatusFromReadiness(readiness, !row.artist.trim()),
       previewState: hasAudio ? "ready" : previewStateFromUrl(previewUrl),
       loudnessLufs: null,
-      energyScore: null,
     },
   } as Track;
 }
 
 const TRACK_SELECT = `
-  id, library_id, title, artist, album, genre, label, bpm, key, duration_sec, created_at,
+  id, library_id, title, artist, album, genre, label, bpm, key, rating, energy_rating, duration_sec, created_at,
   audio_objects ( id, kind, object_key ),
   track_features ( status, features, created_at ),
   track_embeddings ( id )
