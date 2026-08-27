@@ -2,11 +2,7 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import {
-  clearAccessCodeCookie,
-  readAccessCodeCookie,
-  redeemAccessCodeForUser,
-} from "@/lib/auth/access-code";
+import { hasValidAccessCodeCookie } from "@/lib/auth/access-code";
 import { forbidden, notConfigured, unauthorized } from "@/lib/cloud/http";
 import { getSupabasePublishableEnv, isCloudAppMode } from "@/lib/env";
 
@@ -42,28 +38,15 @@ export async function getAppAccess(): Promise<AppAccess | null> {
     return { user, profile };
   }
 
-  const pendingCode = await readAccessCodeCookie();
-  if (pendingCode) {
-    const redeemed = await redeemAccessCodeForUser(user.id, pendingCode);
-    if (redeemed.ok) {
-      await clearAccessCodeCookie();
-      const { data: refreshed } = await supabase
-        .from("profiles")
-        .select("id, access_code_id, display_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (refreshed?.access_code_id) {
-        return { user, profile: refreshed };
-      }
-      return {
-        user,
-        profile: {
-          id: user.id,
-          access_code_id: "redeemed",
-          display_name: profile?.display_name ?? null,
-        },
-      };
-    }
+  if (await hasValidAccessCodeCookie()) {
+    return {
+      user,
+      profile: {
+        id: user.id,
+        access_code_id: "env-access",
+        display_name: profile?.display_name ?? null,
+      },
+    };
   }
 
   return { user, profile: profile ?? { id: user.id, access_code_id: null, display_name: null } };

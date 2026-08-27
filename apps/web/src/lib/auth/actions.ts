@@ -4,19 +4,38 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/env";
 import {
-  clearAccessCodeCookie,
-  readAccessCodeCookie,
-  redeemAccessCodeForUser,
+  hasValidAccessCodeCookie,
   setAccessCodeCookie,
   lookupValidAccessCode,
 } from "@/lib/auth/access-code";
+import {
+  AUTH_MESSAGES,
+  isMissingSupabaseConfig,
+  isStrongPassword,
+  mapSupabaseAuthError,
+} from "@/lib/auth/auth-messages";
 
-export type AuthActionState = { error: string | null };
+export type AuthActionState = { error: string | null; signInInstead?: boolean };
 
 function safeNextPath(next: unknown): string {
   if (typeof next !== "string") return "/app";
   if (!next.startsWith("/") || next.startsWith("//")) return "/app";
   return next;
+}
+
+async function getOptionalUser() {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return { ok: true as const, user };
+  } catch (error) {
+    if (isMissingSupabaseConfig(error)) {
+      return { ok: false as const, error: AUTH_MESSAGES.supabaseMissing };
+    }
+    throw error;
+  }
 }
 
 export async function validateAccessCode(
@@ -25,20 +44,13 @@ export async function validateAccessCode(
 ): Promise<AuthActionState> {
   const code = String(formData.get("code") ?? "");
   const next = safeNextPath(formData.get("next"));
-  const result = await lookupValidAccessCode(code);
+  const result = lookupValidAccessCode(code);
   if (!result.ok) return { error: result.error };
 
-  await setAccessCodeCookie(result.row.code);
+  await setAccessCodeCookie(result.code);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    const redeemed = await redeemAccessCodeForUser(user.id, result.row.code);
-    if (!redeemed.ok) return { error: redeemed.error };
-    await clearAccessCodeCookie();
+  const session = await getOptionalUser();
+  if (session.ok && session.user) {
     redirect(next);
   }
 
@@ -54,12 +66,19 @@ export async function signInWithEmail(
   const next = safeNextPath(formData.get("next"));
 
   if (!email || !password) {
-    return { error: "Email and password are required." };
+    return { error: AUTH_MESSAGES.passwordRequired };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return mapSupabaseAuthError(error.message);
+  } catch (error) {
+    if (isMissingSupabaseConfig(error)) {
+      return { error: AUTH_MESSAGES.supabaseMissing };
+    }
+    throw error;
+  }
 
   redirect(next);
 }
@@ -73,36 +92,36 @@ export async function signUpWithEmail(
   const next = safeNextPath(formData.get("next"));
 
   if (!email || !password) {
-    return { error: "Email and password are required." };
+    return { error: AUTH_MESSAGES.passwordRequired };
   }
-  if (password.length < 8) {
-    return { error: "Use at least 8 characters." };
+  if (!isStrongPassword(password)) {
+    return { error: AUTH_MESSAGES.weakPassword };
   }
 
-  const pendingCode = await readAccessCodeCookie();
-  if (!pendingCode) {
+  if (!(await hasValidAccessCodeCookie())) {
     redirect(`/access?next=${encodeURIComponent(next)}`);
   }
 
-  const supabase = await createClient();
-  const origin = getSiteUrl();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}`,
-    },
-  });
-  if (error) return { error: error.message };
+  try {
+    const supabase = await createClient();
+    const origin = getSiteUrl();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}`,
+      },
+    });
+    if (error) return mapSupabaseAuthError(error.message);
 
-  if (data.user) {
-    const redeemed = await redeemAccessCodeForUser(data.user.id, pendingCode);
-    if (!redeemed.ok) return { error: redeemed.error };
-    await clearAccessCodeCookie();
-  }
-
-  if (!data.session) {
-    redirect("/login?checkEmail=1");
+    if (!data.session) {
+      redirect("/login?checkEmail=1");
+    }
+  } catch (error) {
+    if (isMissingSupabaseConfig(error)) {
+      return { error: AUTH_MESSAGES.supabaseMissing };
+    }
+    throw error;
   }
 
   redirect(next);
@@ -113,14 +132,21 @@ export async function requestPasswordReset(
   formData: FormData,
 ): Promise<AuthActionState> {
   const email = String(formData.get("email") ?? "").trim();
-  if (!email) return { error: "Enter the email on your account." };
+  if (!email) return { error: AUTH_MESSAGES.resetEmail };
 
-  const supabase = await createClient();
-  const origin = getSiteUrl();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/confirm?next=/update-password`,
-  });
-  if (error) return { error: error.message };
+  try {
+    const supabase = await createClient();
+    const origin = getSiteUrl();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/confirm?next=/update-password`,
+    });
+    if (error) return mapSupabaseAuthError(error.message);
+  } catch (error) {
+    if (isMissingSupabaseConfig(error)) {
+      return { error: AUTH_MESSAGES.supabaseMissing };
+    }
+    throw error;
+  }
 
   redirect("/reset-password?sent=1");
 }
@@ -130,19 +156,30 @@ export async function updatePassword(
   formData: FormData,
 ): Promise<AuthActionState> {
   const password = String(formData.get("password") ?? "");
-  if (password.length < 8) {
-    return { error: "Use at least 8 characters." };
+  if (!isStrongPassword(password)) {
+    return { error: AUTH_MESSAGES.weakPassword };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: error.message };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return mapSupabaseAuthError(error.message);
+  } catch (error) {
+    if (isMissingSupabaseConfig(error)) {
+      return { error: AUTH_MESSAGES.supabaseMissing };
+    }
+    throw error;
+  }
 
   redirect("/app");
 }
 
 export async function signOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  try {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+  } catch (error) {
+    if (!isMissingSupabaseConfig(error)) throw error;
+  }
   redirect("/");
 }

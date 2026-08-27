@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, fieldClassName } from "@/components/auth/AuthCard";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { signInWithEmail, type AuthActionState } from "@/lib/auth/actions";
+import { AUTH_MESSAGES } from "@/lib/auth/auth-messages";
 
 const initial: AuthActionState = { error: null };
 
@@ -55,7 +56,7 @@ export function LoginForm({
         ) : null}
         {oauthError ? (
           <p className="text-sm text-danger" role="alert">
-            Google sign-in did not complete. Try again, or use email.
+            {AUTH_MESSAGES.googleSignInFailed}
           </p>
         ) : null}
         {state.error ? (

@@ -17,11 +17,11 @@ export default async function LoginPage({
       footer={
         <>
           Need an access code first?{" "}
-          <Link href="/access" className="text-paper hover:underline">
+          <Link href="/access" className="text-amber hover:underline">
             Start digging
           </Link>
           <span className="mx-2 text-line">·</span>
-          <Link href="/signup" className="text-paper hover:underline">
+          <Link href="/signup" className="text-amber hover:underline">
             Create account
           </Link>
         </>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { SignUpForm } from "@/components/auth/SignUpForm";
-import { readAccessCodeCookie } from "@/lib/auth/access-code";
+import { hasValidAccessCodeCookie } from "@/lib/auth/access-code";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Create account" };
@@ -13,8 +13,7 @@ export default async function SignUpPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const code = await readAccessCodeCookie();
-  if (!code) {
+  if (!(await hasValidAccessCodeCookie())) {
     redirect(`/access?next=${encodeURIComponent(next || "/app")}`);
   }
 
@@ -23,10 +22,10 @@ export default async function SignUpPage({
       title="Create account"
       footer={
         <>
-          Music files stay private. Cloud demo uploads are not public.
+          The web demo is a shared crate. On Mac, your files stay on your machine.
           <span className="mt-3 block">
             Already have an account?{" "}
-            <Link href="/login" className="text-paper hover:underline">
+            <Link href="/login" className="text-amber hover:underline">
               Sign in
             </Link>
           </span>

@@ -31,9 +31,10 @@ Copy `.env.example` to `.env.local`. Never commit `.env` or `.env.local`.
 
 Required:
 
+- `ACCESS_CODE` (server only; never `NEXT_PUBLIC_*`. Compared with a constant-time check. Fail-closed if unset.)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY`)
-- `SUPABASE_SECRET_KEY` (server only; access-code validation)
+- `SUPABASE_SECRET_KEY` (server only; cloud APIs)
 - `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_APP_MODE` (`mock`, `local`, or `cloud`)
 
@@ -42,9 +43,9 @@ Mode-specific:
 - `NEXT_PUBLIC_LOCAL_API_URL` in local mode
 - `NEXT_PUBLIC_CLOUD_API_URL` in cloud mode
 
-Values can be copied from the repo-root `.env.example`. The publishable key is the browser/Supabase client key. The secret key is used only in server actions and route handlers to read/redeem `access_codes`.
+Values can be copied from the repo-root `.env.example`. The publishable key is the browser/Supabase client key.
 
-Local seed code (after applying migrations + seed): `CRATEDIG-DEV`.
+Prototype access: set `ACCESS_CODE` in `.env.local` and on Vercel (example value `THONGLOR`). Do not put it in `NEXT_PUBLIC_*`. Existing `validate_access_code` / `redeem_access_code` RPCs remain unused for this gate.
 
 ## Routes
 

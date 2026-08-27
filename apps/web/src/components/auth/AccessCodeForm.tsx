@@ -4,11 +4,19 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, fieldClassName } from "@/components/auth/AuthCard";
 import { validateAccessCode, type AuthActionState } from "@/lib/auth/actions";
+import { ACCESS_MESSAGES } from "@/lib/auth/auth-messages";
 
 const initial: AuthActionState = { error: null };
 
-export function AccessCodeForm({ next = "/app" }: { next?: string }) {
+export function AccessCodeForm({
+  next = "/app",
+  configured = true,
+}: {
+  next?: string;
+  configured?: boolean;
+}) {
   const [state, action, pending] = useActionState(validateAccessCode, initial);
+  const error = configured ? state.error : ACCESS_MESSAGES.notConfigured;
 
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -19,17 +27,19 @@ export function AccessCodeForm({ next = "/app" }: { next?: string }) {
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          required
-          placeholder="CRATEDIG-…"
-          className={`${fieldClassName} tracking-[0.12em]`}
+          required={configured}
+          disabled={!configured}
+          aria-invalid={Boolean(error)}
+          placeholder="Enter your code"
+          className={`${fieldClassName} tracking-[0.12em] disabled:opacity-50`}
         />
       </Field>
-      {state.error ? (
+      {error ? (
         <p className="text-sm text-danger" role="alert">
-          {state.error}
+          {error}
         </p>
       ) : null}
-      <Button disabled={pending}>{pending ? "Checking…" : "Continue"}</Button>
+      <Button disabled={pending || !configured}>{pending ? "Checking…" : "Continue"}</Button>
     </form>
   );
 }

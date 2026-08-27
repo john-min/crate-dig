@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, fieldClassName } from "@/components/auth/AuthCard";
 import { updatePassword, type AuthActionState } from "@/lib/auth/actions";
+import { AUTH_MESSAGES } from "@/lib/auth/auth-messages";
 
 const initial: AuthActionState = { error: null };
 
@@ -22,6 +23,7 @@ export function UpdatePasswordForm() {
           className={fieldClassName}
         />
       </Field>
+      <p className="text-[13px] text-paper-dim">{AUTH_MESSAGES.weakPassword}</p>
       {state.error ? (
         <p className="text-sm text-danger" role="alert">
           {state.error}

@@ -11,6 +11,7 @@ const sans = Instrument_Sans({
 const serif = Instrument_Serif({
   subsets: ["latin"],
   weight: "400",
+  style: ["normal", "italic"],
   variable: "--font-instrument-serif",
   display: "swap",
 });
@@ -20,7 +21,8 @@ export const metadata: Metadata = {
     default: "Crate Dig",
     template: "%s · Crate Dig",
   },
-  description: "Find the next record. Analyze your library, explore clusters, and build crates.",
+  description:
+    "Explore a curated library mapped by sound. Ask Q where your set should go next. Soon, analyze your own collection on Mac.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
