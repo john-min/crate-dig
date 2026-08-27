@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getR2Config, type R2Config } from "./env";
+import { parseS3ListObjects } from "./list-xml";
 import { presignAwsRequest, r2ObjectUrl, signedAwsHeaders } from "./signature";
 
 export const UPLOAD_TTL_SECONDS = 15 * 60;
@@ -62,6 +63,30 @@ export function presignR2Get(input: {
     url: signed.url,
     expiresAt: new Date(Date.now() + expiresSeconds * 1000).toISOString(),
   };
+}
+
+export async function listR2ObjectKeys(prefix: string): Promise<string[]> {
+  const config = getR2Config();
+  if (!config) return [];
+  const keys: string[] = [];
+  let continuation: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const url = r2ObjectUrl(config.endpoint, config.bucket, "");
+    url.searchParams.set("list-type", "2");
+    url.searchParams.set("max-keys", "1000");
+    if (prefix) url.searchParams.set("prefix", prefix);
+    if (continuation) url.searchParams.set("continuation-token", continuation);
+    const headers = signedAwsHeaders({ method: "GET", url }, credentials(config));
+    const response = await fetch(url, { method: "GET", headers, cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`R2 list failed with status ${response.status}.`);
+    }
+    const parsed = parseS3ListObjects(await response.text());
+    keys.push(...parsed.keys);
+    if (!parsed.truncated || !parsed.nextContinuationToken) break;
+    continuation = parsed.nextContinuationToken;
+  }
+  return keys;
 }
 
 export async function headR2Object(objectKey: string): Promise<{

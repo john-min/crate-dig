@@ -19,6 +19,7 @@ describe("runtime selection", () => {
     expect(() => resolveWebAppMode(undefined)).toThrow(/NEXT_PUBLIC_APP_MODE/);
     expect(() => resolveWebAppMode("desktop")).toThrow(/NEXT_PUBLIC_APP_MODE/);
     expect(resolveWebAppMode("local")).toBe("local");
+    expect(resolveWebAppMode("preview")).toBe("preview");
   });
 
   it("composes mock, local, and cloud adapters without silent fallback", () => {
@@ -65,6 +66,34 @@ describe("MockAdapter", () => {
     expect(hasLocalImport(adapter)).toBe(true);
     expect("createSignedUpload" in adapter).toBe(false);
   });
+
+  it("loads an R2 preview catalog and requests signed playback", async () => {
+    const adapter = new MockAdapter({
+      catalogPath: "/api/preview/catalog",
+      playbackPath: "/api/preview/playback",
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/catalog")) {
+          return jsonResponse({
+            tracks: [{ id: "r2-abc", title: "That Beat", artist: "Acrobat" }],
+          });
+        }
+        if (url.includes("/playback") && url.includes("r2-abc")) {
+          return jsonResponse({ url: "https://r2.example/signed", expiresAt: "t" });
+        }
+        return jsonResponse({}, 404);
+      },
+    });
+    const libraries = await adapter.listLibraries();
+    expect(libraries[0]?.source).toBe("demo");
+    const tracks = await adapter.listTracks();
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]).toMatchObject({ id: "r2-abc", title: "That Beat", artist: "Acrobat" });
+    expect(await adapter.getPlaybackUrl("r2-abc")).toEqual({
+      url: "https://r2.example/signed",
+      expiresAt: "t",
+    });
+  });
 });
 
 describe("CloudAdapter", () => {
@@ -105,6 +134,34 @@ describe("CloudAdapter", () => {
     expect(hasLocalImport(adapter)).toBe(false);
     expect(hasCloudUpload(adapter)).toBe(true);
     expect("importFolder" in adapter).toBe(false);
+  });
+
+  it("keeps R2 playback-ready previewState when list tracks omit a signed URL", async () => {
+    const adapter = new CloudAdapter({
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes("/tracks")) {
+          return jsonResponse({
+            tracks: [
+              {
+                id: "trk-r2",
+                libraryId: "lib-demo",
+                title: "Salt Flats",
+                artist: "Demo",
+                previewUrl: null,
+                studio: { previewState: "ready", analysisStatus: "ok" },
+              },
+            ],
+          });
+        }
+        return jsonResponse({ detail: "missing" }, 404);
+      },
+    });
+    const tracks = await adapter.listTracks();
+    expect(tracks[0]?.previewUrl).toBeNull();
+    expect(
+      (tracks[0] as Track & { studio?: { previewState?: string } }).studio,
+    ).toMatchObject({ previewState: "ready" });
   });
 
   it("never falls back to mock tracks and requests librosa-zscore-v1 neighbors", async () => {

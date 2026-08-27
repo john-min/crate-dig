@@ -30,6 +30,7 @@ import type {
   ColorBy,
   Crate,
   LiveMessage,
+  LibrarySource,
   LibraryView,
   MobileView,
   PlayStatus,
@@ -39,6 +40,8 @@ import type {
   StudioFilters,
   StudioTrack,
 } from "@/lib/studio/types";
+
+const PREVIEW_CRATES_KEY = "cd.preview.crates";
 
 type StudioContextValue = {
   tracks: StudioTrack[];
@@ -101,7 +104,7 @@ type StudioContextValue = {
   setWebglOk: (value: boolean) => void;
   howToReadOpen: boolean;
   setHowToReadOpen: (value: boolean) => void;
-  librarySource: "mock" | "disk" | "cloud";
+  librarySource: LibrarySource;
   libraryName: string;
   libraryView: LibraryView;
   setLibraryView: (value: LibraryView) => void;
@@ -119,8 +122,9 @@ export interface StudioProviderProps {
   adapter: CrateDigAdapter;
   children: ReactNode;
   initialCrates?: Crate[];
-  librarySource: "mock" | "disk" | "cloud";
+  librarySource: LibrarySource;
   projection?: ProjectionCapability;
+  sessionOnly?: boolean;
 }
 
 export function StudioProvider({
@@ -129,6 +133,7 @@ export function StudioProvider({
   initialCrates = [],
   librarySource,
   projection,
+  sessionOnly = false,
 }: StudioProviderProps) {
   const [allTracks, setAllTracks] = useState<StudioTrack[]>([]);
   const [libraryName, setLibraryName] = useState("Library");
@@ -167,6 +172,8 @@ export function StudioProvider({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingIdRef = useRef<string | null>(null);
 
+  const [cratesReady, setCratesReady] = useState(!sessionOnly);
+
   useEffect(() => {
     playingIdRef.current = playingId;
   }, [playingId]);
@@ -176,12 +183,40 @@ export function StudioProvider({
   }, []);
 
   useEffect(() => {
+    if (!sessionOnly) return;
+    const restoreTimer = window.setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem(PREVIEW_CRATES_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Crate[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCrates(parsed);
+            setActiveCrateId(parsed[0]?.id ?? "session");
+          }
+        }
+      } catch {
+        /* keep initial crates */
+      }
+      setCratesReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(restoreTimer);
+  }, [sessionOnly]);
+
+  useEffect(() => {
+    if (!sessionOnly || !cratesReady) return;
+    sessionStorage.setItem(PREVIEW_CRATES_KEY, JSON.stringify(crates));
+  }, [crates, cratesReady, sessionOnly]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [libraries, records, projectionFeed] = await Promise.all([
-          adapter.listLibraries(),
-          adapter.listTracks(),
+        const libraries = await adapter.listLibraries();
+        const primary =
+          libraries.find((library) => library.source === "demo") ?? libraries[0];
+        const [records, projectionFeed] = await Promise.all([
+          adapter.listTracks(primary ? { libraryId: primary.id } : {}),
           projection?.getProjectionMapFeed().catch(() => undefined),
         ]);
         if (cancelled) return;
@@ -189,8 +224,8 @@ export function StudioProvider({
           projectionFeed?.points.map((point) => [point.trackId, point]) ?? [],
         );
         setAllTracks(records.map((track) => mapTrackToStudio(track, points.get(track.id))));
-        setLibraryName(libraries[0]?.name ?? "Library");
-        announce(`Loaded ${records.length} tracks from ${libraries[0]?.name ?? "the library"}.`);
+        setLibraryName(primary?.name ?? "Library");
+        announce(`Loaded ${records.length} tracks from ${primary?.name ?? "the library"}.`);
       } catch (error) {
         if (cancelled) return;
         setAllTracks([]);
@@ -205,6 +240,7 @@ export function StudioProvider({
   useEffect(() => {
     const el = new Audio();
     el.preload = "metadata";
+    el.crossOrigin = "anonymous";
     audioRef.current = el;
     const onTime = () => setPlayheadSec(el.currentTime || 0);
     const onPlaying = () => setPlayStatus("playing");
@@ -455,6 +491,7 @@ export function StudioProvider({
         setPlayStatus("loading");
         announce(`Loading ${track.title}`);
         if (!resume) {
+          el.crossOrigin = "anonymous";
           el.src = url;
         }
         void el.play().then(
@@ -485,6 +522,11 @@ export function StudioProvider({
             return;
           }
         }
+        if (librarySource === "preview") {
+          setPlayStatus("failed");
+          announce(`${track.title} has no playable R2 object.`);
+          return;
+        }
         if (track.previewUrl) {
           startUrlPlayback(track.previewUrl);
           return;
@@ -497,7 +539,7 @@ export function StudioProvider({
         startSimulatedPlayback();
       })();
     },
-    [adapter, announce, playStatus, playingId, selectedIds, tracks],
+    [adapter, announce, librarySource, playStatus, playingId, selectedIds, tracks],
   );
 
   const pause = useCallback(() => {

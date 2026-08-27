@@ -278,7 +278,13 @@ export function FilterRail({
             </form>
           </>
         ) : (
-          <span>{s.librarySource === "disk" ? "Local-only mode" : "Prototype · mock library"}</span>
+          <span>
+            {s.librarySource === "disk"
+              ? "Local-only mode"
+              : s.librarySource === "preview"
+                ? "Preview · R2 session"
+                : "Prototype · mock library"}
+          </span>
         )}
       </nav>
     </aside>

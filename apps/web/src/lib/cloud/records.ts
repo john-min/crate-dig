@@ -7,6 +7,7 @@ import {
 } from "@crate-dig/app-core";
 import type { Library, Track } from "@crate-dig/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playback-object";
 
 type TrackRow = {
   id: string;
@@ -31,13 +32,19 @@ export async function listOwnedLibraries(supabase: SupabaseClient): Promise<Libr
     .select("id, name, source, created_at, updated_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    source: row.source,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (data ?? [])
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      source: row.source,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+    .sort((left, right) => {
+      if (left.source === "demo" && right.source !== "demo") return -1;
+      if (right.source === "demo" && left.source !== "demo") return 1;
+      return (left.createdAt ?? "").localeCompare(right.createdAt ?? "");
+    });
 }
 
 const UUID_RE =
@@ -87,7 +94,9 @@ function mapTrackRow(row: TrackRow): Track {
     features: latestFeature?.features,
     embeddings,
   });
-  const hasAudio = (row.audio_objects ?? []).length > 0;
+  const audioObjects = row.audio_objects ?? [];
+  const hasAudio = hasPlayableAudioObject(audioObjects);
+  // Signed URLs expire; the client fetches a fresh GET via /playback on play.
   const previewUrl = null;
   return {
     id: row.id,
@@ -112,7 +121,7 @@ function mapTrackRow(row: TrackRow): Track {
       suggestedMoment: "Cloud upload",
       tags: ["cloud"],
       analysisStatus: analysisStatusFromReadiness(readiness, !row.artist.trim()),
-      previewState: previewStateFromUrl(previewUrl),
+      previewState: hasAudio ? "ready" : previewStateFromUrl(previewUrl),
       loudnessLufs: null,
       energyScore: null,
     },
@@ -161,9 +170,5 @@ export async function originalObjectKey(
     .order("created_at", { ascending: false });
   if (error) throw error;
   const rows = data ?? [];
-  return (
-    rows.find((row) => row.kind === "original")?.object_key ??
-    rows[0]?.object_key ??
-    null
-  );
+  return pickPlaybackObjectKey(rows);
 }

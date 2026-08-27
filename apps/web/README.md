@@ -18,6 +18,8 @@ Vercel root directory should be `apps/web`.
 ## Runtime modes
 
 - `mock`: checked-in synthetic fixtures; no Supabase, FastAPI, or private audio.
+- `preview`: no auth, no Supabase. Lists audio under `demo/` (and `libraries/demo/`)
+  in R2, signs short-lived GET URLs, and keeps crates in this tab only.
 - `local`: the existing Next UI talks to FastAPI at `127.0.0.1` and needs no login.
 - `cloud`: Supabase SSR/Auth/RLS plus authenticated cloud APIs and signed direct R2
   upload/playback.
@@ -36,7 +38,7 @@ Required:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY`)
 - `SUPABASE_SECRET_KEY` (server only; cloud APIs)
 - `NEXT_PUBLIC_SITE_URL`
-- `NEXT_PUBLIC_APP_MODE` (`mock`, `local`, or `cloud`)
+- `NEXT_PUBLIC_APP_MODE` (`mock`, `preview`, `local`, or `cloud`)
 
 Mode-specific:
 
@@ -46,6 +48,37 @@ Mode-specific:
 Values can be copied from the repo-root `.env.example`. The publishable key is the browser/Supabase client key.
 
 Prototype access: set `ACCESS_CODE` in `.env.local` and on Vercel (example value `THONGLOR`). Do not put it in `NEXT_PUBLIC_*`. Existing `validate_access_code` / `redeem_access_code` RPCs remain unused for this gate.
+
+## Preview playback (R2, no auth)
+
+Vercel **Preview** (`web-dev`) should set `NEXT_PUBLIC_APP_MODE=preview` plus the same
+server-only `R2_*` keys as Production. Leave Supabase vars unset or unused. Production
+stays `cloud`.
+
+The studio calls `GET /api/preview/catalog` then `GET /api/preview/playback?trackId=`.
+Only objects under `demo/` or `libraries/demo/` are listed. The current bucket uses
+`demo/originals/...`. Audio still never streams through Vercel.
+
+That catalog is public on the Preview URL — only put demo audio in those prefixes.
+
+CORS origins must include `http://localhost:3000`, `http://localhost:3001`, and the
+Preview hostname (scheme+host only). Allow `GET` / `HEAD` / `Range`.
+
+## Cloud playback (R2)
+
+Studio play calls `GET /api/cloud/tracks/:id/playback`, which returns a short-lived signed **GET** against R2. Audio does not stream through Vercel. Set the R2 keys on Vercel (Production + Preview) and locally:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_AUDIO`
+- `R2_ENDPOINT` (or omit and let the client build `https://<account>.r2.cloudflarestorage.com`)
+
+The list API never embeds those URLs (`previewUrl` stays null; `previewState` is `ready` when an `audio_objects` row exists).
+
+Shared demo catalog: apply `supabase/migrations/20260827000000_demo_library_rls.sql`, then seed one `libraries` row with `source = 'demo'` owned by an operator user, plus `tracks` and `audio_objects.object_key` matching keys in the bucket. Authenticated users can read that library; they cannot write it.
+
+If `<audio>` fails in the browser with a CORS error, add the site origins (scheme+host only) on the R2 bucket CORS policy for `GET`/`HEAD` and `Range`. That is configured in the Cloudflare dashboard, not Wrangler.
 
 ## Routes
 
@@ -63,7 +96,7 @@ Prototype access: set `ACCESS_CODE` in `.env.local` and on Vercel (example value
 | `/analysis` | Analysis stages shell |
 | `/app` | Main studio: filters, map slot, track list, Q, player |
 
-`/import`, `/analysis`, and `/app` require a Supabase session and a redeemed access code on `profiles.access_code_id`.
+`/import`, `/analysis`, and `/app` require a Supabase session and a redeemed access code on `profiles.access_code_id` in `cloud` mode. Preview and mock skip that gate.
 
 ## Map slot (Phase 6)
 

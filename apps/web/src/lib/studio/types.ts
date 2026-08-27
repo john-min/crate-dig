@@ -14,6 +14,7 @@ export type PlayStatus = "idle" | "loading" | "playing" | "paused" | "buffering"
 export type RowDensity = "comfortable" | "compact";
 export type MobileView = "map" | "list" | "crate";
 export type LibraryView = "all" | "recent" | "unplayed";
+export type LibrarySource = "mock" | "disk" | "cloud" | "preview";
 export type Breakpoint = "mobile" | "small" | "tablet" | "laptop" | "desktop";
 
 export type Crate = {

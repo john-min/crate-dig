@@ -4,14 +4,16 @@ export function jsonError(error: CrateDigError, status: number): Response {
   return Response.json({ error }, { status });
 }
 
-export function notConfigured(operation: string): Response {
+export function notConfigured(
+  operation: string,
+  remediation = "Configure R2 and Supabase server credentials, then retry this authenticated cloud operation.",
+): Response {
   return jsonError(
     {
       code: "CLOUD_NOT_CONFIGURED",
       message: `${operation} is unavailable because the cloud adapter is not configured.`,
       retryable: false,
-      remediation:
-        "Configure R2 and Supabase server credentials, then retry this authenticated cloud operation.",
+      remediation,
     },
     503,
   );

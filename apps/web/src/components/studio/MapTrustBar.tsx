@@ -19,6 +19,8 @@ export function MapTrustBar() {
     summary = `Showing ${visible.toLocaleString()} of ${total.toLocaleString()} records. Hidden records are outside your BPM, mood, or texture filters.`;
   } else if (s.librarySource === "disk") {
     summary = `${visible.toLocaleString()} local files playing from disk. Map positions are placeholders until analysis runs — distance is not sonic similarity yet.`;
+  } else if (s.librarySource === "preview") {
+    summary = `${visible.toLocaleString()} records playing from R2. Map positions are placeholders until analysis — distance is not sonic similarity yet.`;
   } else {
     summary = `${visible.toLocaleString()} analyzed records arranged by sonic similarity. Nearby records share audio features like rhythm, texture, brightness, low-end weight, tempo, and key movement. Color is currently showing ${s.colorBy}.`;
   }

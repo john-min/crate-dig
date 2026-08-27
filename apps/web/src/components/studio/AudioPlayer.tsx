@@ -20,7 +20,9 @@ export function AudioPlayer() {
   let statusCopy = "Audition from the map or list";
   if (!track) statusCopy = "No track loaded";
   else if (loading) statusCopy = "Loading preview";
-  else if (failed && track.previewState === "missing") statusCopy = "Missing local file";
+  else if (failed && track.previewState === "missing") {
+    statusCopy = s.librarySource === "preview" ? "No R2 object" : "Missing local file";
+  }
   else if (failed && track.previewState === "expired") statusCopy = "Signed URL expired";
   else if (failed) statusCopy = "Playback failed";
   else if (isPlaying) statusCopy = "Playing";
