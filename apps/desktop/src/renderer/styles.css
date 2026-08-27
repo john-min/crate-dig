@@ -1,0 +1,151 @@
+:root {
+  color-scheme: dark;
+  --ink: #12110f;
+  --panel: #1c1a17;
+  --paper: #f4efe6;
+  --muted: #9a9286;
+  --line: rgba(244, 239, 230, 0.12);
+  --amber: #e9a63c;
+  --coral: #e06a4e;
+  --lime: #a9c64a;
+  font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.4rem;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  min-height: 0;
+}
+
+.panel {
+  padding: 16px 18px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.panel:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+p,
+li,
+.status {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+button {
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: var(--amber);
+  color: #161412;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--line);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tracks li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.tracks li[aria-selected="true"] {
+  color: var(--amber);
+}
+
+.player {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+
+audio {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.warn {
+  color: var(--coral);
+}
+
+.ok {
+  color: var(--lime);
+}
+
+.muted {
+  color: var(--muted);
+}

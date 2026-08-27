@@ -1,0 +1,66 @@
+# generated analysis workspaces
+djvibe_data/
+djvibe_clap/
+**/djvibe_data/
+**/djvibe_clap/
+
+# private DJ-library exports (may contain personal paths and catalog metadata)
+data/private/
+data/reference/**/*.csv
+
+# generated analysis artifacts
+*.npy
+*.npz
+audio_cache.jsonl
+feedback.jsonl
+dashboard.html
+features.csv
+clusters.csv
+embeddings_ids.json
+reduced_emb.npy
+
+# model/download/cache artifacts
+models/
+.cache/
+
+# Python/local env
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# secrets and local env
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.swp
+*.swo
+
+# Node / Next.js
+node_modules/
+.pnpm-store/
+.next/
+out/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Electron Forge
+apps/desktop/.vite/
+apps/desktop/out/
+
+# Supabase local runtime
+supabase/.temp/
+supabase/.branches/

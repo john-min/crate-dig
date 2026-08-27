@@ -1,0 +1,46 @@
+import type {
+  CloudRuntimeComposition,
+  LocalRuntimeComposition,
+  MockRuntimeComposition,
+} from "@crate-dig/contracts";
+import { CloudAdapter } from "./cloud-adapter";
+import { LocalAdapter } from "./local-adapter";
+import { MockAdapter } from "./mock-adapter";
+
+export type WebAppMode = "mock" | "local" | "cloud";
+export type WebRuntimeComposition =
+  | MockRuntimeComposition
+  | LocalRuntimeComposition
+  | CloudRuntimeComposition;
+
+export function resolveWebAppMode(value: string | undefined): WebAppMode {
+  if (value === "mock" || value === "local" || value === "cloud") return value;
+  throw new Error(
+    "NEXT_PUBLIC_APP_MODE must be explicitly configured as mock, local, or cloud.",
+  );
+}
+
+export function createWebRuntime(
+  mode: WebAppMode,
+  environment: {
+    localApiUrl?: string;
+    cloudApiUrl?: string;
+  } = {},
+): WebRuntimeComposition {
+  switch (mode) {
+    case "mock":
+      return { adapter: new MockAdapter() };
+    case "local":
+      return {
+        adapter: new LocalAdapter({
+          baseUrl: environment.localApiUrl,
+        }),
+      };
+    case "cloud":
+      return {
+        adapter: new CloudAdapter({
+          baseUrl: environment.cloudApiUrl,
+        }),
+      };
+  }
+}

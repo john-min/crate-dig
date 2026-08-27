@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS Version="1.0.0">
+  <PRODUCT Name="rekordbox" Version="6.8.5" Company="Pioneer DJ"/>
+  <COLLECTION Entries="4">
+    <TRACK TrackID="1001" Name="Sunset Line" Artist="Ada" Album="Evenings" Genre="Deep House" Label="Crate Test" AverageBpm="122.00" Tonality="8A" TotalTime="360" Rating="153" DateAdded="2024-06-01" Location="file://localhost/Users/test/Music/sunset-line.wav"/>
+    <TRACK TrackID="1002" Name="Peak Driver" Artist="Bram" Album="Nights" Genre="Tech House" Label="Crate Test" AverageBpm="126.50" Tonality="9A" TotalTime="412" Rating="204" DateAdded="2024-07-12" Location="file://localhost/Users/test/Music/peak-driver.aiff"/>
+    <TRACK TrackID="1003" Name="Streaming Ghost" Artist="Cloud" Album="" Genre="" Label="" AverageBpm="120.00" Tonality="" TotalTime="180" Rating="0" DateAdded="2024-08-01" Location="spotify:track:abc123"/>
+    <TRACK TrackID="1004" Name="Missing File" Artist="Gap" Album="" Genre="Ambient" Label="" AverageBpm="114.00" Tonality="6A" TotalTime="240" Rating="51" DateAdded="2024-08-02" Location=""/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Type="0" Name="Sets" Count="1">
+        <NODE Name="Warm Up" Type="1" KeyType="0" Entries="2">
+          <TRACK Key="1001"/>
+          <TRACK Key="1002"/>
+        </NODE>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>
