@@ -8,6 +8,7 @@ import {
 import type { Library, Track } from "@crate-dig/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playback-object";
+import { restrictDemoAudioObjects } from "@/lib/preview/r2-catalog";
 import { studioFieldsFromPreviewTags } from "@/lib/preview/studio-from-tags";
 
 type TrackRow = {
@@ -183,4 +184,66 @@ export async function originalObjectKey(
   if (error) throw error;
   const rows = data ?? [];
   return pickPlaybackObjectKey(rows);
+}
+
+export async function listDemoLibraries(supabase: SupabaseClient): Promise<Library[]> {
+  const { data, error } = await supabase
+    .from("libraries")
+    .select("id, name, source, created_at, updated_at")
+    .eq("source", "demo")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    source: row.source,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<Track[]> {
+  const libraries = await listDemoLibraries(supabase);
+  const ids = libraries.map((library) => library.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("tracks")
+    .select(TRACK_SELECT)
+    .in("library_id", ids)
+    .order("artist", { ascending: true })
+    .order("title", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as TrackRow[]).map((row) =>
+    mapTrackRow({
+      ...row,
+      audio_objects: restrictDemoAudioObjects(row.audio_objects),
+    }),
+  );
+}
+
+export async function demoPlaybackObjectKey(
+  supabase: SupabaseClient,
+  trackId: string,
+): Promise<string | null> {
+  const id = trackId.trim();
+  if (!id) return null;
+  const { data, error } = await supabase
+    .from("tracks")
+    .select(
+      `
+      id,
+      libraries!inner ( source ),
+      audio_objects ( kind, object_key )
+    `,
+    )
+    .eq("id", id)
+    .eq("libraries.source", "demo")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return pickPlaybackObjectKey(
+    restrictDemoAudioObjects(
+      (data as { audio_objects?: { kind: string; object_key: string }[] }).audio_objects,
+    ),
+  );
 }

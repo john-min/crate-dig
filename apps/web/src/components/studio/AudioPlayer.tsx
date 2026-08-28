@@ -60,7 +60,7 @@ export function AudioPlayer() {
           type="button"
           className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[#EDEFF3] text-[#0B0D10] disabled:bg-[#20242C] disabled:text-[#5B6373]"
           aria-label={isPlaying ? "Pause" : "Play"}
-          disabled={!canPlay || failed}
+          disabled={!canPlay}
           onClick={() => (isPlaying ? s.pause() : s.play(track?.id))}
         >
           {isPlaying ? <IconPause className="h-2.5 w-2.5" /> : <IconPlay className="h-2.5 w-2.5" />}
@@ -106,7 +106,7 @@ export function AudioPlayer() {
         type="button"
         className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#EDEFF3] text-[#0B0D10] disabled:bg-[#20242C] disabled:text-[#5B6373] md:hidden"
         aria-label={isPlaying ? "Pause" : "Play"}
-        disabled={!canPlay || failed}
+        disabled={!canPlay}
         onClick={() => (isPlaying ? s.pause() : s.play(track?.id))}
       >
         {isPlaying ? <IconPause className="h-2 w-2" /> : <IconPlay className="h-2 w-2" />}

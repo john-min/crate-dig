@@ -6,11 +6,18 @@ import { StudioApp } from "@/components/studio/StudioApp";
 import {
   createWebRuntime,
   resolveWebAppMode,
+  type WebAppMode,
 } from "@/lib/adapters/runtime";
 import { getMockLibrary } from "@/lib/studio/mock-library";
 
-export function AppShell({ signedIn = true }: { signedIn?: boolean }) {
-  const mode = resolveWebAppMode(process.env.NEXT_PUBLIC_APP_MODE);
+export function AppShell({
+  signedIn = true,
+  mode: modeOverride,
+}: {
+  signedIn?: boolean;
+  mode?: WebAppMode;
+}) {
+  const mode = modeOverride ?? resolveWebAppMode(process.env.NEXT_PUBLIC_APP_MODE);
   const sessionOnly = mode === "preview" || mode === "mock";
   const runtime = useMemo(
     () =>

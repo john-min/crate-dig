@@ -4,6 +4,7 @@ import {
   isAllowedPreviewObjectKey,
   parsePreviewTrack,
   previewTrackIdForKey,
+  restrictDemoAudioObjects,
 } from "./r2-catalog";
 
 describe("preview R2 catalog", () => {
@@ -36,5 +37,14 @@ describe("preview R2 catalog", () => {
       ),
     );
     expect(parsePreviewTrack("demo/originals/notes.json")).toBeNull();
+  });
+
+  it("keeps only demo-prefix audio object keys for unsigned playback", () => {
+    expect(
+      restrictDemoAudioObjects([
+        { kind: "original", object_key: "demo/originals/a.mp3" },
+        { kind: "original", object_key: "libraries/user-lib/originals/secret.wav" },
+      ]),
+    ).toEqual([{ kind: "original", object_key: "demo/originals/a.mp3" }]);
   });
 });

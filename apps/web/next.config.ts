@@ -12,7 +12,8 @@ if (
   appMode !== "cloud" &&
   appMode !== "preview"
 ) {
-  process.env.NEXT_PUBLIC_APP_MODE = "mock";
+  process.env.NEXT_PUBLIC_APP_MODE =
+    process.env.VERCEL_ENV === "preview" ? "preview" : "mock";
 }
 
 const nextConfig: NextConfig = {

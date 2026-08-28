@@ -265,7 +265,6 @@ export function StudioProvider({
   useEffect(() => {
     const el = new Audio();
     el.preload = "metadata";
-    el.crossOrigin = "anonymous";
     audioRef.current = el;
     const onTime = () => setPlayheadSec(el.currentTime || 0);
     const onPlaying = () => setPlayStatus("playing");
@@ -521,7 +520,6 @@ export function StudioProvider({
         setPlayStatus("loading");
         announce(`Loading ${track.title}`);
         if (!resume) {
-          el.crossOrigin = "anonymous";
           el.src = url;
         }
         void el.play().then(

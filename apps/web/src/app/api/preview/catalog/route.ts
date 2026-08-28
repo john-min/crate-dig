@@ -1,35 +1,37 @@
-import { notConfigured, notFound } from "@/lib/cloud/http";
-import { getPublicAppMode } from "@/lib/env";
-import { loadPreviewCatalog } from "@/lib/preview/r2-library";
-import {
-  previewCatalogTrackFromTags,
-  type PreviewTagRecord,
-} from "@/lib/preview/studio-from-tags";
-import { getR2Config } from "@/lib/r2/env";
-import tagCatalog from "@/data/preview-track-studio.json";
+import { jsonError, notConfigured, notFound } from "@/lib/cloud/http";
+import { isDemoPreviewApiEnabled } from "@/lib/preview/access";
+import { loadDemoPreviewCatalog, previewCatalogConfigured } from "@/lib/preview/r2-library";
 
 export const runtime = "nodejs";
 
-function isOpenPreviewMode(): boolean {
-  const mode = getPublicAppMode();
-  return mode === "preview" || mode === "mock";
-}
-
 export async function GET() {
-  if (!isOpenPreviewMode()) {
-    return notFound("Preview catalog is only available in preview/mock mode.");
+  if (!isDemoPreviewApiEnabled()) {
+    return notFound("Preview catalog is not available in local mode.");
   }
-  if (!getR2Config()) {
+  if (!previewCatalogConfigured()) {
     return notConfigured(
-      "Preview R2 catalog",
-      "Set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_AUDIO, and R2_ACCOUNT_ID or R2_ENDPOINT.",
+      "Preview demo catalog",
+      "Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SECRET_KEY. Seed the source=demo library.",
     );
   }
-  const entries = await loadPreviewCatalog();
-  const tagsById = tagCatalog as Record<string, PreviewTagRecord>;
-  return Response.json({
-    tracks: entries.map((entry) =>
-      previewCatalogTrackFromTags(entry, tagsById[entry.id] ?? {}),
-    ),
-  });
+  try {
+    const { libraries, tracks } = await loadDemoPreviewCatalog();
+    return Response.json({
+      library: libraries[0] ?? {
+        id: "preview-demo",
+        name: "Demo library",
+        source: "demo",
+      },
+      tracks,
+    });
+  } catch (error) {
+    return jsonError(
+      {
+        code: "CLOUD_QUERY_FAILED",
+        message: error instanceof Error ? error.message : "Could not load the demo catalog.",
+        retryable: true,
+      },
+      500,
+    );
+  }
 }

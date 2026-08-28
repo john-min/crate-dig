@@ -51,13 +51,15 @@ Prototype access: set `ACCESS_CODE` in `.env.local` and on Vercel (example value
 
 ## Preview playback (R2, no auth)
 
-Vercel **Preview** (`web-dev`) should set `NEXT_PUBLIC_APP_MODE=preview` plus the same
-server-only `R2_*` keys as Production. Leave Supabase vars unset or unused. Production
-stays `cloud`.
+Vercel **Preview** (`web-dev`) and `/map` load the shared `source='demo'` library from
+Supabase (`tracks` + `audio_objects.object_key`) and sign short-lived R2 GETs on play.
+Set `NEXT_PUBLIC_APP_MODE=preview` plus the same `R2_*` and Supabase URL/secret keys as
+Production. Production `/app` stays `cloud` (auth-gated). Seed with
+`python3 scripts/seed-demo-library.py`.
 
 The studio calls `GET /api/preview/catalog` then `GET /api/preview/playback?trackId=`.
-Only objects under `demo/` or `libraries/demo/` are listed. The current bucket uses
-`demo/originals/...`. Audio still never streams through Vercel.
+Only `audio_objects` keys under `demo/` or `libraries/demo/` are signed. Audio still never
+streams through Vercel.
 
 That catalog is public on the Preview URL — only put demo audio in those prefixes.
 

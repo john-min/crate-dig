@@ -23,6 +23,7 @@ const PREVIEW_LIBRARY_ID = "preview-demo";
 
 type PreviewCatalogTrack = {
   id: string;
+  libraryId?: string;
   title: string;
   artist: string;
   bpm?: number | null;
@@ -33,7 +34,7 @@ type PreviewCatalogTrack = {
 function fromPreviewCatalogTrack(track: PreviewCatalogTrack): Track {
   return {
     id: track.id,
-    libraryId: PREVIEW_LIBRARY_ID,
+    libraryId: track.libraryId ?? PREVIEW_LIBRARY_ID,
     title: track.title,
     artist: track.artist,
     readiness: "ready_fast",
@@ -92,6 +93,11 @@ export class MockAdapter implements MockRuntimeAdapter {
   private readonly catalogPath?: string;
   private readonly requestFetch: typeof fetch;
   private catalogPromise: Promise<readonly Track[]> | null = null;
+  private previewLibrary = {
+    id: PREVIEW_LIBRARY_ID,
+    name: "Demo library",
+    source: "demo" as const,
+  };
 
   constructor(
     options: { playbackPath?: string; catalogPath?: string; fetch?: typeof fetch } = {},
@@ -116,11 +122,19 @@ export class MockAdapter implements MockRuntimeAdapter {
   private async fetchCatalog(): Promise<readonly Track[]> {
     const response = await this.requestFetch(this.catalogPath!, { cache: "no-store" });
     if (!response.ok) {
-      throw new Error("Preview R2 catalog is unavailable.");
+      throw new Error("Demo catalog is unavailable.");
     }
     const body = (await response.json()) as {
+      library?: { id?: string; name?: string; source?: string };
       tracks?: PreviewCatalogTrack[];
     };
+    if (body.library?.id && body.library.name) {
+      this.previewLibrary = {
+        id: body.library.id,
+        name: body.library.name,
+        source: "demo",
+      };
+    }
     const tracks = (body.tracks ?? []).map(fromPreviewCatalogTrack);
     this.studioTracks = tracks.map((track) => mapTrackToStudio(track));
     return tracks;
@@ -132,7 +146,8 @@ export class MockAdapter implements MockRuntimeAdapter {
 
   async listLibraries() {
     if (this.catalogPath) {
-      return [{ id: PREVIEW_LIBRARY_ID, name: "Demo library", source: "demo" }];
+      await this.tracksForMode();
+      return [this.previewLibrary];
     }
     return [{ id: MOCK_LIBRARY_ID, name: "Demo library", source: "fixture" }];
   }

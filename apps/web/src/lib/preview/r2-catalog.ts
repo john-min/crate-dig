@@ -26,6 +26,12 @@ export function isAllowedPreviewObjectKey(objectKey: string): boolean {
   return PREVIEW_R2_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
 }
 
+export function restrictDemoAudioObjects<T extends { object_key: string }>(
+  rows: readonly T[] | null | undefined,
+): T[] {
+  return (rows ?? []).filter((row) => isAllowedPreviewObjectKey(row.object_key));
+}
+
 export function previewTrackIdForKey(objectKey: string): string {
   const left = fnv1a(objectKey, 2166136261).toString(16).padStart(8, "0");
   const right = fnv1a(objectKey, 5381).toString(16).padStart(8, "0");
