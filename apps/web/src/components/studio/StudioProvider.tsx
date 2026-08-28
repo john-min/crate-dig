@@ -45,7 +45,11 @@ import type {
   StudioTrack,
 } from "@/lib/studio/types";
 
-const PREVIEW_CRATES_KEY = "cd.preview.crates";
+import {
+  PREVIEW_CRATES_KEY,
+  readPreviewCrateState,
+  serializePreviewCrateState,
+} from "@/lib/studio/preview-crates";
 
 type StudioContextValue = {
   tracks: StudioTrack[];
@@ -192,13 +196,16 @@ export function StudioProvider({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingIdRef = useRef<string | null>(null);
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
 
   const [cratesReady, setCratesReady] = useState(!sessionOnly);
 
   useEffect(() => {
     playingIdRef.current = playingId;
   }, [playingId]);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   const announce = useCallback((text: string) => {
     setLive((prev) => ({ id: prev.id + 1, text }));
@@ -207,28 +214,24 @@ export function StudioProvider({
   useEffect(() => {
     if (!sessionOnly) return;
     const restoreTimer = window.setTimeout(() => {
-      try {
-        const raw = sessionStorage.getItem(PREVIEW_CRATES_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Crate[];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCrates(parsed);
-            setActiveCrateId(parsed[0]?.id ?? "session");
-          }
-        }
-      } catch {
-        /* keep initial crates */
+      const restored = readPreviewCrateState(
+        sessionStorage.getItem(PREVIEW_CRATES_KEY),
+        initialCrates[0]?.id ?? "session",
+      );
+      if (restored) {
+        setCrates(restored.crates);
+        setActiveCrateId(restored.activeCrateId);
       }
       setCratesReady(true);
     }, 0);
 
     return () => window.clearTimeout(restoreTimer);
-  }, [sessionOnly]);
+  }, [initialCrates, sessionOnly]);
 
   useEffect(() => {
     if (!sessionOnly || !cratesReady) return;
-    sessionStorage.setItem(PREVIEW_CRATES_KEY, JSON.stringify(crates));
-  }, [crates, cratesReady, sessionOnly]);
+    sessionStorage.setItem(PREVIEW_CRATES_KEY, serializePreviewCrateState(crates, activeCrateId));
+  }, [activeCrateId, crates, cratesReady, sessionOnly]);
 
   useEffect(() => {
     let cancelled = false;

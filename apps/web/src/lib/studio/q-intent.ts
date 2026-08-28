@@ -14,6 +14,18 @@ export function looksLikeQAsk(value: string): boolean {
   return text.split(/\s+/).length >= 5;
 }
 
+function bpmWindowWithinBounds(center: number, bounds: BpmBounds, span = 4): BpmBounds {
+  let min = Math.max(bounds.min, center - span);
+  let max = Math.min(bounds.max, center + span);
+  min = Math.min(Math.max(min, bounds.min), bounds.max);
+  max = Math.min(Math.max(max, bounds.min), bounds.max);
+  if (min > max) {
+    const edge = center <= bounds.min ? bounds.min : bounds.max;
+    min = max = edge;
+  }
+  return { min, max };
+}
+
 export function interpretQPrompt(
   prompt: string,
   bounds: BpmBounds = BPM_BOUNDS,
@@ -28,8 +40,9 @@ export function interpretQPrompt(
   const bpmMatch = text.match(/around\s+(\d{2,3})/) ?? text.match(/(\d{2,3})\s*bpm/);
   if (bpmMatch) {
     const center = Number(bpmMatch[1]);
-    filters.bpmMin = Math.max(bounds.min, center - 4);
-    filters.bpmMax = Math.min(bounds.max, center + 4);
+    const window = bpmWindowWithinBounds(center, bounds);
+    filters.bpmMin = window.min;
+    filters.bpmMax = window.max;
     evidence.push(`${center} BPM ±4`);
   }
 

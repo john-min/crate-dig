@@ -143,6 +143,10 @@ describe("bpmBoundsFromTracks", () => {
       max: 150,
     });
     expect(bpmBoundsFromTracks([{ bpm: 122 }])).toEqual({ min: 121, max: 123 });
+    expect(bpmBoundsFromTracks([{ bpm: 120.6 }, { bpm: 130.4 }])).toEqual({
+      min: 120,
+      max: 131,
+    });
   });
 });
 

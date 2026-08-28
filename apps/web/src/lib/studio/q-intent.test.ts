@@ -30,4 +30,14 @@ describe("interpretQPrompt", () => {
     expect(filters.bpmMin).toBe(144);
     expect(filters.bpmMax).toBe(150);
   });
+
+  it("does not invert a BPM window outside the library span", () => {
+    const high = interpretQPrompt("around 160 BPM", { min: 108, max: 150 }).filters;
+    expect(high.bpmMin).toBe(150);
+    expect(high.bpmMax).toBe(150);
+    expect(high.bpmMin).toBeLessThanOrEqual(high.bpmMax ?? 0);
+    const low = interpretQPrompt("around 90 BPM", { min: 108, max: 150 }).filters;
+    expect(low.bpmMin).toBe(108);
+    expect(low.bpmMax).toBe(108);
+  });
 });

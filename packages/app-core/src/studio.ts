@@ -62,9 +62,10 @@ export function bpmBoundsFromTracks(tracks: readonly { bpm?: number | null }[]):
   for (const track of tracks) {
     const bpm = track.bpm;
     if (bpm == null || !Number.isFinite(bpm)) continue;
-    const rounded = Math.round(bpm);
-    if (rounded < min) min = rounded;
-    if (rounded > max) max = rounded;
+    const low = Math.floor(bpm);
+    const high = Math.ceil(bpm);
+    if (low < min) min = low;
+    if (high > max) max = high;
   }
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
     return { min: BPM_BOUNDS.min, max: BPM_BOUNDS.max };

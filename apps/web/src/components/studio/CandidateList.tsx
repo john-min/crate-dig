@@ -1,15 +1,26 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { TRACK_ROW_HEIGHT } from "@/lib/studio/constants";
 import { useStudio } from "./StudioProvider";
 import { TrackRow } from "./TrackRow";
 
 export function CandidateList({ embedded = false }: { embedded?: boolean } = {}) {
   const s = useStudio();
-  const rowH = s.density === "compact" ? 38 : 40;
+  const rowH = TRACK_ROW_HEIGHT[s.density];
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(280);
+
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setHeight(el.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const items = s.candidates;
   const start = Math.max(0, Math.floor(scrollTop / rowH) - 4);
@@ -20,11 +31,6 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
   const header = s.seed
     ? `Near selected · ${items.length} candidates`
     : `Records in view · ${items.length}`;
-
-  const onRef = (el: HTMLDivElement | null) => {
-    scroller.current = el;
-    if (el) setHeight(el.clientHeight);
-  };
 
   const playingId = s.playing?.id;
 
@@ -53,7 +59,7 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
         <span />
       </div>
       <div
-        ref={onRef}
+        ref={scroller}
         className="min-h-0 flex-1 overflow-auto"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       >

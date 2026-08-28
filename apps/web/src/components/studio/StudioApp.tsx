@@ -94,7 +94,7 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
                     {s.qStatus === "found" && s.qAsk ? "Applied from Q" : "Records in view"}
                   </span>
                   <span className="text-[11.5px] text-[#7C8698]">
-                    {s.visible.length.toLocaleString()} tracks
+                    {s.candidates.length.toLocaleString()} tracks
                   </span>
                   <div
                     role="separator"

@@ -4,6 +4,7 @@ import type { Energy, Mood, Texture } from "./types";
 export { BPM_BOUNDS };
 export const MODEL_VERSION = "fast-librosa · pipeline 2026.08";
 export const LIBRARY_TOTAL = 3000;
+export const TRACK_ROW_HEIGHT = { compact: 38, comfortable: 42 } as const;
 
 export const CLUSTER_COPY: Record<number, { name: string; blurb: string }> = {
   [-1]: {
