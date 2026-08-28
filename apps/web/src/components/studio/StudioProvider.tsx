@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   activeFilterCount,
+  bpmBoundsFromTracks,
   displaySimilarityReasons,
   mapTrackToStudio,
   matchesStudioFilters,
@@ -25,8 +26,10 @@ import type {
   ProjectionCapability,
 } from "@crate-dig/contracts";
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
-import { EMPTY_FILTERS, MODEL_VERSION } from "@/lib/studio/constants";
+import { CRATE_COLORS, emptyFilters, EMPTY_FILTERS, MODEL_VERSION, MOOD_COLORS } from "@/lib/studio/constants";
+import { interpretQPrompt } from "@/lib/studio/q-intent";
 import type {
+  BpmBounds,
   ColorBy,
   Crate,
   LiveMessage,
@@ -37,6 +40,7 @@ import type {
   QCard,
   QStatus,
   RowDensity,
+  Sidecar,
   StudioFilters,
   StudioTrack,
 } from "@/lib/studio/types";
@@ -51,6 +55,7 @@ type StudioContextValue = {
   setFilters: (next: StudioFilters | ((prev: StudioFilters) => StudioFilters)) => void;
   clearFilters: () => void;
   filterCount: number;
+  bpmBounds: BpmBounds;
   colorBy: ColorBy;
   setColorBy: (value: ColorBy) => void;
   visible: StudioTrack[];
@@ -72,19 +77,30 @@ type StudioContextValue = {
   drawerOpen: boolean;
   openDrawer: (id: string) => void;
   closeDrawer: () => void;
+  sidecar: Sidecar;
   qOpen: boolean;
   qStatus: QStatus;
   qCards: QCard[];
   qPrompt: string;
+  qAsk: string;
+  qEvidence: string[];
   setQPrompt: (value: string) => void;
   openQ: () => void;
+  openCrate: (id?: string) => void;
   closeQ: () => void;
+  closeSidecar: () => void;
   toggleQ: () => void;
   askQ: (prompt?: string) => void;
   activeCrateId: string;
   setActiveCrateId: (id: string) => void;
   activeCrate: Crate | null;
+  crateColor: (id: string) => string;
+  createCrate: () => void;
+  duplicateCrate: (id: string) => void;
   addToCrate: (id: string) => void;
+  removeFromCrate: (id: string) => void;
+  listHeight: number;
+  setListHeight: (value: number) => void;
   density: RowDensity;
   setDensity: (value: RowDensity) => void;
   advancedOpen: boolean;
@@ -153,10 +169,14 @@ export function StudioProvider({
   const [playStatus, setPlayStatus] = useState<PlayStatus>("idle");
   const [playheadSec, setPlayheadSec] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [qOpen, setQOpen] = useState(false);
-  const [qRequest, setQRequest] = useState<"idle" | "loading" | "failure" | "no-results">("idle");
+  const [sidecar, setSidecar] = useState<Sidecar>("closed");
+  const [qPhase, setQPhase] = useState<QStatus>("idle");
   const [qCards, setQCards] = useState<QCard[]>([]);
   const [qPrompt, setQPrompt] = useState("");
+  const [qAsk, setQAsk] = useState("");
+  const [qEvidence, setQEvidence] = useState<string[]>([]);
+  const [qFocusIds, setQFocusIds] = useState<string[] | null>(null);
+  const [listHeight, setListHeight] = useState(236);
   const [crates, setCrates] = useState(initialCrates);
   const [activeCrateId, setActiveCrateId] = useState(initialCrates[0]?.id ?? "sunset-lounge");
   const [density, setDensity] = useState<RowDensity>("compact");
@@ -171,6 +191,8 @@ export function StudioProvider({
   const playTimer = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingIdRef = useRef<string | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const [cratesReady, setCratesReady] = useState(!sessionOnly);
 
@@ -223,7 +245,10 @@ export function StudioProvider({
         const points = new Map(
           projectionFeed?.points.map((point) => [point.trackId, point]) ?? [],
         );
-        setAllTracks(records.map((track) => mapTrackToStudio(track, points.get(track.id))));
+        const mapped = records.map((track) => mapTrackToStudio(track, points.get(track.id)));
+        const bounds = bpmBoundsFromTracks(mapped);
+        setAllTracks(mapped);
+        setFilters((prev) => ({ ...prev, bpmMin: bounds.min, bpmMax: bounds.max }));
         setLibraryName(primary?.name ?? "Library");
         announce(`Loaded ${records.length} tracks from ${primary?.name ?? "the library"}.`);
       } catch (error) {
@@ -291,6 +316,7 @@ export function StudioProvider({
     () => allTracks.map((t) => (hiddenIds.has(t.id) ? { ...t, hiddenFromRecs: true } : t)),
     [allTracks, hiddenIds],
   );
+  const bpmBounds = useMemo(() => bpmBoundsFromTracks(allTracks), [allTracks]);
 
   const seed = useMemo(() => tracks.find((t) => t.id === seedId) ?? null, [tracks, seedId]);
   const playing = useMemo(() => tracks.find((t) => t.id === playingId) ?? null, [tracks, playingId]);
@@ -308,9 +334,11 @@ export function StudioProvider({
       ) {
         return false;
       }
-      return matchesStudioFilters(track, filters, seed);
+      if (!matchesStudioFilters(track, filters, seed, bpmBounds)) return false;
+      if (qFocusIds && !qFocusIds.includes(track.id)) return false;
+      return true;
     });
-  }, [tracks, filters, seed, libraryView, playedIds, recentCutoff]);
+  }, [tracks, filters, seed, libraryView, playedIds, recentCutoff, qFocusIds, bpmBounds]);
 
   const recentCount = useMemo(
     () =>
@@ -322,7 +350,7 @@ export function StudioProvider({
   const unplayedCount = tracks.length - playedIds.size;
   const analysisReady = tracks.some((track) => track.analysisStatus === "ok");
 
-  const filterCount = activeFilterCount(filters);
+  const filterCount = activeFilterCount(filters, bpmBounds);
 
   useEffect(() => {
     if (!seedId) return;
@@ -373,9 +401,11 @@ export function StudioProvider({
   const activeCrate = crates.find((c) => c.id === activeCrateId) ?? null;
 
   const clearFilters = useCallback(() => {
-    setFilters(EMPTY_FILTERS);
+    setFilters(emptyFilters(bpmBounds));
+    setQFocusIds(null);
+    setQPhase("idle");
     announce("Filters cleared. Showing the full analyzed library.");
-  }, [announce]);
+  }, [announce, bpmBounds]);
 
   const setSeed = useCallback(
     (id: string | null) => {
@@ -596,107 +626,143 @@ export function StudioProvider({
     [adapter],
   );
 
+  const cardsFromTracks = useCallback((pool: StudioTrack[]): QCard[] => {
+    return pool.slice(0, 12).map((track) => ({
+      trackId: track.id,
+      title: track.title,
+      artist: track.artist,
+      score: 0,
+      bpm: track.bpm,
+      key: track.key,
+      reason: track.tags[0] ?? track.mood,
+      color: MOOD_COLORS[track.mood] ?? "#8B7BF0",
+    }));
+  }, []);
+
   const askQ = useCallback(
     (prompt?: string) => {
       const text = (prompt ?? qPrompt).trim();
-      setQOpen(true);
-      if (!analysisReady) {
-        setQRequest("no-results");
-        setQCards([]);
-        announce("Analyze this library before Q searches for sonic neighbors.");
-        return;
-      }
-      setQRequest("loading");
+      if (!text) return;
+      setSidecar("q");
+      setQAsk(text);
+      setQPrompt("");
+      setQPhase("listening");
       announce("Q is listening for nearby records");
       window.setTimeout(() => {
         if (/fail|offline/i.test(text)) {
-          setQRequest("failure");
+          setQPhase("failure");
           setQCards([]);
           announce("Q couldn’t finish that search. Your library and crate are unchanged.");
           return;
         }
-        const from = primarySelected ?? seed ?? visible[0];
-        if (!from || visible.length === 0) {
-          setQRequest("no-results");
-          setQCards([]);
-          announce("Q didn’t find a confident match.");
+        const { filters: patch, evidence } = interpretQPrompt(text, bpmBounds);
+        const nextFilters = { ...filtersRef.current, ...patch, query: "" };
+        const pool = tracks.filter((track) => matchesStudioFilters(track, nextFilters, seed, bpmBounds));
+        const from = primarySelected ?? seed ?? pool[0];
+        const filterDriven = Boolean(
+          patch.bpmMin != null ||
+            patch.bpmMax != null ||
+            (patch.moods && patch.moods.length) ||
+            (patch.keys && patch.keys.length) ||
+            (patch.textures && patch.textures.length) ||
+            (patch.energies && patch.energies.length),
+        );
+        const finish = (cards: QCard[]) => {
+          setFilters(nextFilters);
+          setQEvidence(evidence);
+          setQCards(cards);
+          setQFocusIds(filterDriven ? null : cards.map((card) => card.trackId));
+          setQPhase(cards.length ? "found" : "empty");
+          announce(
+            cards.length
+              ? `Q found ${cards.length} nearby records.`
+              : "Q didn’t find a confident match.",
+          );
+        };
+        if (analysisReady && from) {
+          void requestNeighbors(from.id)
+            .then((items) => {
+              const ranked = buildQCards(from, pool, items).map((card) => {
+                const track = tracks.find((item) => item.id === card.trackId);
+                return { ...card, color: MOOD_COLORS[track?.mood ?? ""] ?? "#8B7BF0" };
+              });
+              finish(ranked.length ? ranked : cardsFromTracks(pool.filter((track) => track.id !== from.id)));
+            })
+            .catch(() => finish(cardsFromTracks(pool)));
           return;
         }
-        void requestNeighbors(from.id)
-          .then((items) => {
-            const cards = buildQCards(from, visible, items);
-            if (!items.length || !cards.length) {
-              setQRequest("no-results");
-              setQCards([]);
-              announce(
-                items.length
-                  ? "Q didn’t find a confident match."
-                  : "Neighbor ranking is unavailable. Q will not invent sonic matches.",
-              );
-            } else {
-              setQRequest("idle");
-              setQCards(cards);
-              announce(
-                selectedIds.length > 1
-                  ? `Q grouped ${selectedIds.length} selected records.`
-                  : `Q found ${cards.length} nearby records.`,
-              );
-            }
-          })
-          .catch(() => {
-            setQRequest("failure");
-            setQCards([]);
-            announce("Q couldn’t finish that search. Your library and crate are unchanged.");
-          });
+        finish(cardsFromTracks(pool));
       }, 700);
     },
     [
       analysisReady,
       announce,
+      bpmBounds,
       buildQCards,
+      cardsFromTracks,
       primarySelected,
       qPrompt,
       requestNeighbors,
       seed,
-      selectedIds.length,
-      visible,
+      tracks,
     ],
   );
 
   const openQ = useCallback(() => {
-    setQOpen(true);
-    const from = primarySelected ?? seed;
-    if (!analysisReady) {
-      setQRequest("no-results");
-      setQCards([]);
-      return;
-    }
-    if (!from) {
-      setQRequest("idle");
-      setQCards([]);
-      return;
-    }
-    setQRequest("loading");
-    void requestNeighbors(from.id)
-      .then((items) => {
-        const cards = buildQCards(from, visible, items);
-        setQCards(cards);
-        setQRequest(cards.length ? "idle" : "no-results");
-      })
-      .catch(() => {
-        setQCards([]);
-        setQRequest("failure");
-      });
-  }, [analysisReady, buildQCards, primarySelected, requestNeighbors, seed, visible]);
+    setSidecar("q");
+    setMobileView("q");
+  }, []);
 
-  const closeQ = useCallback(() => setQOpen(false), []);
+  const openCrate = useCallback((id?: string) => {
+    if (id) setActiveCrateId(id);
+    setSidecar("crate");
+    setMobileView("crate");
+  }, []);
+
+  const closeSidecar = useCallback(() => {
+    setSidecar("closed");
+  }, []);
+
+  const closeQ = closeSidecar;
   const toggleQ = useCallback(() => {
-    setQOpen((open) => {
-      if (open) return false;
-      queueMicrotask(() => openQ());
-      return true;
-    });
-  }, [openQ]);
+    setSidecar((current) => (current === "q" ? "closed" : "q"));
+  }, []);
+
+  const crateColor = useCallback(
+    (id: string) => {
+      const index = Math.max(0, crates.findIndex((crate) => crate.id === id));
+      return CRATE_COLORS[index % CRATE_COLORS.length];
+    },
+    [crates],
+  );
+
+  const createCrate = useCallback(() => {
+    const id = `crate-${Date.now()}`;
+    const name = `Crate ${crates.length + 1}`;
+    setCrates((prev) => [
+      ...prev,
+      { id, name, trackIds: [], intention: "", room: "", timeOfDay: "" },
+    ]);
+    setActiveCrateId(id);
+    setSidecar("crate");
+    announce(`${name} created.`);
+  }, [announce, crates.length]);
+
+  const duplicateCrate = useCallback(
+    (id: string) => {
+      const source = crates.find((crate) => crate.id === id);
+      if (!source) return;
+      const copyId = `crate-${Date.now()}`;
+      setCrates((prev) => [
+        ...prev,
+        { ...source, id: copyId, name: `${source.name} copy`, trackIds: [...source.trackIds] },
+      ]);
+      setActiveCrateId(copyId);
+      setSidecar("crate");
+      announce(`Duplicated ${source.name}.`);
+    },
+    [announce, crates],
+  );
 
   const addToCrate = useCallback(
     (id: string) => {
@@ -708,7 +774,20 @@ export function StudioProvider({
             : c,
         ),
       );
-      announce(track ? `Added ${track.title} to crate. Undo with the crate list.` : "Added to crate");
+      announce(track ? `Added ${track.title} to crate.` : "Added to crate");
+    },
+    [activeCrateId, announce, tracks],
+  );
+
+  const removeFromCrate = useCallback(
+    (id: string) => {
+      const track = tracks.find((t) => t.id === id);
+      setCrates((prev) =>
+        prev.map((c) =>
+          c.id === activeCrateId ? { ...c, trackIds: c.trackIds.filter((trackId) => trackId !== id) } : c,
+        ),
+      );
+      announce(track ? `Removed ${track.title} from crate.` : "Removed from crate");
     },
     [activeCrateId, announce, tracks],
   );
@@ -762,21 +841,7 @@ export function StudioProvider({
     return () => stopTimer();
   }, []);
 
-  const resolvedQStatus: QStatus = !qOpen
-    ? "collapsed"
-    : qRequest === "loading"
-      ? "loading"
-      : qRequest === "failure"
-        ? "failure"
-        : qRequest === "no-results"
-          ? "no-results"
-          : selectedIds.length > 1
-            ? "multi"
-            : primarySelected || seed
-              ? "track"
-              : activeCrate?.trackIds.length
-                ? "crate"
-                : "empty";
+  const qOpen = sidecar === "q";
 
   const value: StudioContextValue = {
     tracks,
@@ -786,6 +851,7 @@ export function StudioProvider({
     setFilters,
     clearFilters,
     filterCount,
+    bpmBounds,
     colorBy,
     setColorBy,
     visible,
@@ -807,19 +873,30 @@ export function StudioProvider({
     drawerOpen,
     openDrawer,
     closeDrawer,
+    sidecar,
     qOpen,
-    qStatus: resolvedQStatus,
+    qStatus: qPhase,
     qCards,
     qPrompt,
+    qAsk,
+    qEvidence,
     setQPrompt,
     openQ,
+    openCrate,
     closeQ,
+    closeSidecar,
     toggleQ,
     askQ,
     activeCrateId,
     setActiveCrateId,
     activeCrate,
+    crateColor,
+    createCrate,
+    duplicateCrate,
     addToCrate,
+    removeFromCrate,
+    listHeight,
+    setListHeight,
     density,
     setDensity,
     advancedOpen,

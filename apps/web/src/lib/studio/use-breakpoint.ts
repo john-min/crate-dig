@@ -27,7 +27,7 @@ export function isWide(bp: Breakpoint): boolean {
 }
 
 export function docksQ(bp: Breakpoint): boolean {
-  return bp === "desktop";
+  return bp === "desktop" || bp === "laptop";
 }
 
 export function usesFilterSheet(bp: Breakpoint): boolean {

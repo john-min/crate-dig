@@ -1,13 +1,9 @@
 "use client";
 
-import { useStudio } from "./StudioProvider";
-import { BPM_BOUNDS, ENERGIES, MOODS, TEXTURES } from "@/lib/studio/constants";
-import { formatBpm } from "@/lib/studio/format";
 import { signOut } from "@/lib/auth/actions";
-import type { Energy, Mood, Texture } from "@/lib/studio/types";
-
-const CAMELLOT = ["8A", "9A", "10A", "7A", "8B", "9B"];
-const CRATE_COLORS = ["var(--amber)", "var(--lime)", "var(--violet)", "var(--blue)", "var(--cyan)"];
+import { BpmRange } from "./BpmRange";
+import { CamelotMatrix } from "./CamelotMatrix";
+import { useStudio } from "./StudioProvider";
 
 export function FilterRail({
   compact = false,
@@ -21,264 +17,171 @@ export function FilterRail({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-3 py-2">
-        <span className="tabular text-[12px] text-paper-dim">{s.visible.length.toLocaleString()}</span>
-        <Chip
-          label="Filters"
-          on={s.filterCount > 0}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-[#1B1F27] px-3 py-2">
+        <span className="tabular text-[12px] text-[#B7BEC9]">{s.visible.length.toLocaleString()}</span>
+        <button
+          type="button"
+          className="text-[12px] text-[#E9A63C]"
           onClick={() => s.setAdvancedOpen(!s.advancedOpen)}
-        />
+        >
+          Filters
+        </button>
         {s.filterCount > 0 ? (
-          <button type="button" className="text-[12px] text-amber hover:text-paper" onClick={s.clearFilters}>
+          <button type="button" className="text-[12px] text-[#E9A63C]" onClick={s.clearFilters}>
             Clear {s.filterCount}
           </button>
         ) : null}
-        <button
-          type="button"
-          className="ml-auto text-[12px] text-paper-dim hover:text-paper"
-          onClick={s.openQ}
-        >
-          Ask Q
-        </button>
       </div>
     );
   }
 
+  const bpmReadout = filters.bpmNearSeed && s.seed?.bpm != null
+    ? `${Math.round(s.seed.bpm - 4)}–${Math.round(s.seed.bpm + 4)}`
+    : `${Math.round(filters.bpmMin)}–${Math.round(filters.bpmMax)}`;
+
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r border-[var(--hairline)] bg-ink">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-4">
-        <p className="text-[12px] text-paper-dim">
-          <span className="block truncate font-medium text-paper">{s.libraryName}</span>
-          <span className="tabular text-paper">{s.visible.length.toLocaleString()}</span>
-          {" of "}
-          <span className="tabular">{s.tracks.length.toLocaleString()}</span> records
-        </p>
+    <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-r border-[#1B1F27] bg-[#0D0F13] px-3.5 py-4">
+      <nav aria-label="Library" className="grid gap-0.5">
+        <NavRow
+          label="All records"
+          count={s.tracks.length}
+          current={s.libraryView === "all" && !s.seed}
+          onClick={() => {
+            s.setLibraryView("all");
+            s.setSeed(null);
+          }}
+        />
+        <NavRow
+          label="Recently added"
+          count={s.recentCount}
+          current={s.libraryView === "recent"}
+          onClick={() => {
+            s.setSeed(null);
+            s.setLibraryView("recent");
+          }}
+        />
+        <NavRow
+          label="Unplayed"
+          count={s.unplayedCount}
+          current={s.libraryView === "unplayed"}
+          onClick={() => {
+            s.setSeed(null);
+            s.setLibraryView("unplayed");
+          }}
+        />
+      </nav>
 
-        <nav className="mt-4 flex flex-col gap-0.5" aria-label="Library">
-          <NavRow
-            label="All records"
-            count={s.tracks.length}
-            current={s.libraryView === "all" && !s.seed}
-            onClick={() => {
-              s.setLibraryView("all");
-              s.setSeed(null);
-            }}
-          />
-          <NavRow
-            label="Map"
-            count={s.visible.length}
-            current={s.mobileView === "map"}
-            onClick={() => s.setMobileView("map")}
-          />
-          <NavRow
-            label="Recently added"
-            count={s.recentCount}
-            current={s.libraryView === "recent"}
-            onClick={() => {
-              s.setSeed(null);
-              s.setLibraryView("recent");
-            }}
-          />
-          <NavRow
-            label="Unplayed"
-            count={s.unplayedCount}
-            current={s.libraryView === "unplayed"}
-            onClick={() => {
-              s.setSeed(null);
-              s.setLibraryView("unplayed");
-            }}
-          />
-          <a
-            href="/analysis"
-            className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-2 py-1.5 text-[12.5px] text-paper-dim hover:bg-ink-hover hover:text-paper"
-          >
-            <span>Analysis runs</span>
-            <span className="h-1.5 w-1.5 rounded-full bg-amber" aria-hidden />
-          </a>
-        </nav>
+      <div className="my-4 h-px bg-[#171B21]" />
 
-        <Section title="Energy">
-          <div className="flex flex-wrap gap-1.5">
-            {ENERGIES.map((energy) => (
-              <Chip
-                key={energy}
-                label={energy}
-                on={filters.energies.includes(energy)}
-                onClick={() => toggleEnergy(s, energy)}
-              />
-            ))}
-          </div>
-        </Section>
-
-        <Section title="Mood">
-          <div className="flex flex-wrap gap-1.5">
-            {MOODS.map((mood) => (
-              <Chip
-                key={mood}
-                label={mood}
-                on={filters.moods.includes(mood)}
-                onClick={() => toggleMood(s, mood)}
-              />
-            ))}
-          </div>
-        </Section>
-
-        <Section title="Texture">
-          <div className="flex flex-wrap gap-1.5">
-            {TEXTURES.map((texture) => (
-              <Chip
-                key={texture}
-                label={texture}
-                on={filters.textures.includes(texture)}
-                onClick={() => toggleTexture(s, texture)}
-              />
-            ))}
-          </div>
-        </Section>
-
-        <Section title="BPM">
-          <p className="tabular text-[12px] text-paper-dim">
-            {Math.round(filters.bpmMin)} – {Math.round(filters.bpmMax)}
-          </p>
-          <div className="mt-2 flex flex-col gap-1">
-            <input
-              type="range"
-              min={BPM_BOUNDS.min}
-              max={BPM_BOUNDS.max}
-              value={filters.bpmMin}
-              aria-label="Minimum BPM"
-              className="w-full accent-amber"
-              onChange={(e) =>
-                s.setFilters({ ...filters, bpmMin: Math.min(Number(e.target.value), filters.bpmMax) })
-              }
-            />
-            <input
-              type="range"
-              min={BPM_BOUNDS.min}
-              max={BPM_BOUNDS.max}
-              value={filters.bpmMax}
-              aria-label="Maximum BPM"
-              className="w-full accent-amber"
-              onChange={(e) =>
-                s.setFilters({ ...filters, bpmMax: Math.max(Number(e.target.value), filters.bpmMin) })
-              }
-            />
-          </div>
-          {s.seed?.bpm != null ? (
-            <label className="mt-2 flex items-center gap-2 text-[12px] text-paper-dim">
-              <input
-                type="checkbox"
-                checked={filters.bpmNearSeed}
-                onChange={(e) => s.setFilters({ ...filters, bpmNearSeed: e.target.checked })}
-              />
-              {formatBpm(s.seed.bpm)} BPM ±4
-            </label>
-          ) : null}
-        </Section>
-
-        <Section title="Key">
-          <div className="flex flex-wrap gap-1.5">
-            {CAMELLOT.map((key) => (
-              <Chip
-                key={key}
-                label={key}
-                on={filters.keys.includes(key)}
-                onClick={() =>
-                  s.setFilters({
-                    ...filters,
-                    keys: filters.keys.includes(key)
-                      ? filters.keys.filter((k) => k !== key)
-                      : [...filters.keys, key],
-                  })
-                }
-              />
-            ))}
-          </div>
-          {s.seed ? (
-            <label className="mt-2 flex items-center gap-2 text-[12px] text-paper-dim">
-              <input
-                type="checkbox"
-                checked={filters.compatibleKeys}
-                onChange={(e) => s.setFilters({ ...filters, compatibleKeys: e.target.checked })}
-              />
-              Compatible keys
-            </label>
-          ) : null}
-        </Section>
-
-        <div className="mt-6 flex items-center justify-between">
+      <div className="flex items-center justify-between px-2.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">BPM</span>
+        <span className="text-[12px] text-[#EDEFF3]">{bpmReadout}</span>
+      </div>
+      <div className="mt-2.5 px-2.5">
+        <BpmRange
+          min={s.bpmBounds.min}
+          max={s.bpmBounds.max}
+          lo={filters.bpmMin}
+          hi={filters.bpmMax}
+          onChange={({ lo, hi }) => s.setFilters({ ...filters, bpmMin: lo, bpmMax: hi })}
+        />
+        {s.seed?.bpm != null ? (
           <button
             type="button"
-            className="text-[12px] text-paper-dim hover:text-paper"
-            onClick={() => s.setAdvancedOpen(!s.advancedOpen)}
-            aria-expanded={s.advancedOpen}
+            aria-pressed={filters.bpmNearSeed}
+            onClick={() => s.setFilters({ ...filters, bpmNearSeed: !filters.bpmNearSeed })}
+            className="mt-2 rounded-full border px-2.5 py-1 text-[11.5px]"
+            style={{
+              color: filters.bpmNearSeed ? "#181203" : "#98A0AE",
+              background: filters.bpmNearSeed ? "#E9A63C" : "transparent",
+              borderColor: filters.bpmNearSeed ? "#E9A63C" : "#262B34",
+            }}
           >
-            More filters
+            near seed ±4
           </button>
-          {s.filterCount > 0 ? (
-            <button type="button" className="text-[12px] text-amber hover:text-paper" onClick={s.clearFilters}>
-              Clear all
-              <span className="ml-1 tabular">({s.filterCount})</span>
-            </button>
-          ) : (
-            <span className="text-[12px] text-[var(--text-disabled)]">No filters</span>
-          )}
-        </div>
-
-        {s.advancedOpen ? (
-          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--raised)] px-3 py-2.5">
-            <p className="text-[11.5px] leading-[17px] text-muted">
-              Genre, label, and date filters become available after those fields are analyzed.
-            </p>
-          </div>
         ) : null}
-
-        <Section title="Crates">
-          <ul className="flex flex-col gap-0.5">
-            {s.crates.map((crate, index) => (
-              <li key={crate.id}>
-                <button
-                  type="button"
-                  onClick={() => s.setActiveCrateId(crate.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12.5px] ${
-                    crate.id === s.activeCrateId ? "bg-ink-hover text-paper" : "text-paper-dim hover:text-paper"
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
-                      style={{ background: CRATE_COLORS[index % CRATE_COLORS.length] }}
-                      aria-hidden
-                    />
-                    <span className="truncate">{crate.name}</span>
-                  </span>
-                  <span className="tabular text-[12px] text-muted">{crate.trackIds.length}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Section>
       </div>
-      <nav className="flex items-center justify-between gap-2 border-t border-[var(--hairline)] px-4 py-3 text-[12px] text-muted">
+
+      <div className="my-4 h-px bg-[#171B21]" />
+      <CamelotMatrix
+        selected={filters.keys}
+        onToggle={(key) =>
+          s.setFilters({
+            ...filters,
+            keys: filters.keys.includes(key)
+              ? filters.keys.filter((item) => item !== key)
+              : [...filters.keys, key],
+          })
+        }
+        onClear={() => s.setFilters({ ...filters, keys: [], compatibleKeys: false })}
+      />
+
+      <div className="my-4 h-px bg-[#171B21]" />
+      <div className="flex items-center justify-between px-2.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">Crates</span>
+        <button
+          type="button"
+          aria-label="New crate"
+          className="bg-transparent text-[14px] text-[#98A0AE]"
+          onClick={s.createCrate}
+        >
+          +
+        </button>
+      </div>
+      <div className="mt-2.5 grid gap-px">
+        {s.crates.map((crate) => {
+          const active = crate.id === s.activeCrateId && s.sidecar === "crate";
+          return (
+            <div
+              key={crate.id}
+              className="flex h-8 items-center gap-2 rounded-[7px] px-2.5"
+              style={{ background: active ? "#181C24" : "transparent" }}
+            >
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 bg-transparent p-0 text-left"
+                onClick={() => s.openCrate(crate.id)}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
+                  style={{ background: s.crateColor(crate.id) }}
+                />
+                <span className="truncate text-[12.5px] text-[#EDEFF3]">{crate.name}</span>
+              </button>
+              <span className="shrink-0 text-[11.5px] text-[#6B7383]">{crate.trackIds.length}</span>
+              <button
+                type="button"
+                aria-label={`Duplicate ${crate.name}`}
+                className="shrink-0 bg-transparent text-[11px] text-[#5B6373]"
+                onClick={() => s.duplicateCrate(crate.id)}
+              >
+                ⎘
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto border-t border-[#1B1F27] pt-3 text-[12px] text-[#8B929F]">
         {signedIn ? (
-          <>
+          <div className="flex items-center justify-between px-2.5">
             <span>
-              <a href="/import" className="hover:text-paper">
+              <a href="/import" className="hover:text-[#EDEFF3]">
                 Import
               </a>
-              <span className="mx-2 text-line">/</span>
-              <a href="/analysis" className="hover:text-paper">
+              <span className="mx-2 text-[#1B1F27]">/</span>
+              <a href="/analysis" className="hover:text-[#EDEFF3]">
                 Analysis
               </a>
             </span>
             <form action={signOut}>
-              <button type="submit" className="hover:text-paper">
+              <button type="submit" className="hover:text-[#EDEFF3]">
                 Sign out
               </button>
             </form>
-          </>
+          </div>
         ) : (
-          <span>
+          <span className="px-2.5">
             {s.librarySource === "disk"
               ? "Local-only mode"
               : s.librarySource === "preview"
@@ -286,68 +189,8 @@ export function FilterRail({
                 : "Prototype · mock library"}
           </span>
         )}
-      </nav>
+      </div>
     </aside>
-  );
-}
-
-function toggleMood(s: ReturnType<typeof useStudio>, mood: Mood) {
-  const on = s.filters.moods.includes(mood);
-  s.setFilters({
-    ...s.filters,
-    moods: on ? s.filters.moods.filter((m) => m !== mood) : [...s.filters.moods, mood],
-  });
-}
-
-function toggleEnergy(s: ReturnType<typeof useStudio>, energy: Energy) {
-  const on = s.filters.energies.includes(energy);
-  s.setFilters({
-    ...s.filters,
-    energies: on ? s.filters.energies.filter((e) => e !== energy) : [...s.filters.energies, energy],
-  });
-}
-
-function toggleTexture(s: ReturnType<typeof useStudio>, texture: Texture) {
-  const on = s.filters.textures.includes(texture);
-  s.setFilters({
-    ...s.filters,
-    textures: on ? s.filters.textures.filter((t) => t !== texture) : [...s.filters.textures, texture],
-  });
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-6">
-      <h2 className="mb-2.5 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Chip({
-  label,
-  on,
-  onClick,
-}: {
-  label: string;
-  on?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on ?? false}
-      onClick={onClick}
-      className={`rounded-full border px-2.5 py-1 text-[11.5px] capitalize ${
-        on
-          ? "border-amber/45 bg-amber/10 text-paper"
-          : "border-[var(--border-subtle)] text-paper-dim hover:border-line hover:text-paper"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -359,20 +202,21 @@ function NavRow({
 }: {
   label: string;
   count: number;
-  current?: boolean;
+  current: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-current={current ? "page" : undefined}
-      className={`flex h-[32px] w-full items-center justify-between rounded-[var(--radius-md)] px-2.5 text-left text-[13px] ${
-        current ? "bg-ink-hover text-paper" : "text-paper-dim hover:text-paper"
-      }`}
+      className="flex h-[31px] items-center gap-2.5 rounded-[7px] px-2.5 text-[13px]"
+      style={{
+        background: current ? "#181C24" : "transparent",
+        color: current ? "#EDEFF3" : "#98A0AE",
+      }}
     >
       {label}
-      <span className="tabular text-[12px] text-muted">{count.toLocaleString()}</span>
+      <span className="ml-auto text-[11.5px] text-[#6B7383]">{count.toLocaleString()}</span>
     </button>
   );
 }

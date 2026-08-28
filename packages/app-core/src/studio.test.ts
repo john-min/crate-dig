@@ -3,6 +3,7 @@ import type { Neighbor, Track } from "@crate-dig/contracts";
 import {
   activeFilterCount,
   BPM_BOUNDS,
+  bpmBoundsFromTracks,
   mapTrackToStudio,
   matchesStudioFilters,
   orderTracksByNeighbors,
@@ -134,6 +135,17 @@ describe("orderTracksByNeighbors", () => {
   });
 });
 
+describe("bpmBoundsFromTracks", () => {
+  it("uses tagged BPM min/max and falls back when none exist", () => {
+    expect(bpmBoundsFromTracks([])).toEqual(BPM_BOUNDS);
+    expect(bpmBoundsFromTracks([{ bpm: 108 }, { bpm: 150 }, { bpm: null }])).toEqual({
+      min: 108,
+      max: 150,
+    });
+    expect(bpmBoundsFromTracks([{ bpm: 122 }])).toEqual({ min: 121, max: 123 });
+  });
+});
+
 describe("studio filters", () => {
   it("counts active filters and matches query/bpm/key constraints", () => {
     const trackRow = studio({
@@ -152,6 +164,17 @@ describe("studio filters", () => {
     ).toBe(true);
     expect(
       matchesStudioFilters(trackRow, { ...emptyFilters, bpmMin: 128, bpmMax: 132 }, null),
+    ).toBe(false);
+  });
+
+  it("does not treat the library BPM span as an active filter", () => {
+    const bounds = { min: 108, max: 150 };
+    const full = { ...emptyFilters, bpmMin: 108, bpmMax: 150 };
+    const fast = studio({ id: "fast", title: "Inta", bpm: 150 });
+    expect(activeFilterCount(full, bounds)).toBe(0);
+    expect(matchesStudioFilters(fast, full, null, bounds)).toBe(true);
+    expect(
+      matchesStudioFilters(fast, { ...full, bpmMin: 108, bpmMax: 136 }, null, bounds),
     ).toBe(false);
   });
 });

@@ -11,7 +11,9 @@ export {
 } from "./analysis";
 export {
   BPM_BOUNDS,
+  bpmBoundsFromTracks,
   activeFilterCount,
+  isBpmFilterActive,
   keysCompatible,
   mapTrackToStudio,
   matchesStudioFilters,
@@ -25,6 +27,7 @@ export type {
   Mood,
   PreviewState,
   SimilarityReason,
+  BpmBounds,
   StudioFilters,
   StudioTrack,
   Texture,

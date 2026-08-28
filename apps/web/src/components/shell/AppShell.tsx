@@ -23,14 +23,10 @@ export function AppShell({ signedIn = true }: { signedIn?: boolean }) {
   const initialCrates = useMemo(() => {
     if (mode === "preview") {
       return [
-        {
-          id: "session",
-          name: "Session crate",
-          trackIds: [],
-          intention: "Lasts until you close this tab",
-          room: "Preview",
-          timeOfDay: "Now",
-        },
+        { id: "warm-up", name: "Warm-up", trackIds: [], intention: "Doors, 18:00–19:00", room: "Main", timeOfDay: "Early" },
+        { id: "peak", name: "Peak", trackIds: [], intention: "Peak time, 22:30–00:00", room: "Main", timeOfDay: "Peak" },
+        { id: "afters", name: "Afters", trackIds: [], intention: "Handover onward", room: "Second room", timeOfDay: "Late" },
+        { id: "sunset-lounge", name: "Sunset lounge", trackIds: [], intention: "Rooftop, golden hour", room: "Lounge", timeOfDay: "Sunset" },
       ];
     }
     if (mode === "mock") return getMockLibrary().crates;

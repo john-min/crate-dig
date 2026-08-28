@@ -13,6 +13,11 @@ describe("preview R2 catalog", () => {
     expect(isAllowedPreviewObjectKey("libraries/demo/originals/a.mp3")).toBe(true);
     expect(isAllowedPreviewObjectKey("other/a.mp3")).toBe(false);
     expect(isAllowedPreviewObjectKey("demo/../secret.mp3")).toBe(false);
+    expect(
+      isAllowedPreviewObjectKey(
+        "demo/originals/Contents/Fred again.. & BIA/UnknownAlbum/Fred again.. & BIA - ..FEISTY.mp3",
+      ),
+    ).toBe(true);
   });
 
   it("parses Rekordbox-style object keys into title and artist", () => {

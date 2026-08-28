@@ -1,5 +1,6 @@
 export type {
   AnalysisStatus,
+  BpmBounds,
   Energy,
   Mood,
   PreviewState,
@@ -12,7 +13,7 @@ export type {
 export type ColorBy = "cluster" | "mood" | "energy" | "similarity";
 export type PlayStatus = "idle" | "loading" | "playing" | "paused" | "buffering" | "failed";
 export type RowDensity = "comfortable" | "compact";
-export type MobileView = "map" | "list" | "crate";
+export type MobileView = "map" | "list" | "crate" | "q";
 export type LibraryView = "all" | "recent" | "unplayed";
 export type LibrarySource = "mock" | "disk" | "cloud" | "preview";
 export type Breakpoint = "mobile" | "small" | "tablet" | "laptop" | "desktop";
@@ -36,16 +37,11 @@ export type QCard = {
   reason: string;
   blend?: "safer" | "pivot";
   nonSonic?: boolean;
+  color?: string;
 };
 
-export type QStatus =
-  | "collapsed"
-  | "empty"
-  | "track"
-  | "multi"
-  | "crate"
-  | "loading"
-  | "no-results"
-  | "failure";
+export type Sidecar = "closed" | "q" | "crate";
+
+export type QStatus = "idle" | "listening" | "found" | "empty" | "failure";
 
 export type LiveMessage = { id: number; text: string };

@@ -20,7 +20,9 @@ function fnv1a(value: string, seed: number): number {
 
 export function isAllowedPreviewObjectKey(objectKey: string): boolean {
   const trimmed = objectKey.trim();
-  if (!trimmed || trimmed.includes("..") || trimmed.startsWith("/")) return false;
+  if (!trimmed || trimmed.startsWith("/")) return false;
+  // Reject path-segment traversal only. Filenames like "Fred again.." are valid.
+  if (trimmed.split("/").some((part) => part === "..")) return false;
   return PREVIEW_R2_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
 }
 
