@@ -1,0 +1,14 @@
+{
+  "name": "Crate Dig",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "local-api",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\" && cd apps/local-api && uv run cratedig-local-api"
+    },
+    {
+      "name": "web",
+      "command": "cd apps/web && pnpm dev"
+    }
+  ]
+}
