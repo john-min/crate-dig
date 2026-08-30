@@ -4,6 +4,7 @@ import type { Energy, Mood, Texture } from "./types";
 export { BPM_BOUNDS };
 export const MODEL_VERSION = "fast-librosa · pipeline 2026.08";
 export const LIBRARY_TOTAL = 3000;
+export const TRACK_ROW_HEIGHT = { compact: 38, comfortable: 42 } as const;
 
 export const CLUSTER_COPY: Record<number, { name: string; blurb: string }> = {
   [-1]: {
@@ -64,6 +65,18 @@ export const MOODS: Mood[] = ["warm", "euphoric", "dark", "dreamy", "hypnotic"];
 export const ENERGIES: Energy[] = ["low", "medium", "peak", "driving"];
 export const TEXTURES: Texture[] = ["raw", "atmospheric", "minimal", "percussive", "vocal"];
 
+export const CRATE_COLORS = ["#A9C64A", "#8B7BF0", "#5A8CE8", "#E9A63C"] as const;
+
+export const MOOD_COLORS: Record<string, string> = {
+  warm: "#E9A63C",
+  euphoric: "#8B7BF0",
+  dark: "#5A8CE8",
+  dreamy: "#A9C64A",
+  hypnotic: "#48BFD4",
+  dubby: "#48BFD4",
+  raw: "#E4705A",
+};
+
 export const MOOD_LEGEND: { key: Mood; label: string; swatch: string }[] = [
   { key: "warm", label: "warm", swatch: "#E9A63C" },
   { key: "euphoric", label: "euphoric", swatch: "#B67BFD" },
@@ -72,14 +85,18 @@ export const MOOD_LEGEND: { key: Mood; label: string; swatch: string }[] = [
   { key: "hypnotic", label: "hypnotic", swatch: "#48BFD4" },
 ];
 
-export const EMPTY_FILTERS = {
-  query: "",
-  bpmMin: BPM_BOUNDS.min,
-  bpmMax: BPM_BOUNDS.max,
-  keys: [] as string[],
-  moods: [] as Mood[],
-  energies: [] as Energy[],
-  textures: [] as Texture[],
-  compatibleKeys: false,
-  bpmNearSeed: false,
-};
+export function emptyFilters(bounds: { min: number; max: number } = BPM_BOUNDS) {
+  return {
+    query: "",
+    bpmMin: bounds.min,
+    bpmMax: bounds.max,
+    keys: [] as string[],
+    moods: [] as Mood[],
+    energies: [] as Energy[],
+    textures: [] as Texture[],
+    compatibleKeys: false,
+    bpmNearSeed: false,
+  };
+}
+
+export const EMPTY_FILTERS = emptyFilters();

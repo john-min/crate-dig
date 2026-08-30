@@ -43,6 +43,10 @@ function mapTrack(row: Track): Track {
   const previewUrl = row.previewUrl || null;
   const readiness = row.readiness ?? "imported";
   const studio = (row as Track & { studio?: Record<string, unknown> }).studio;
+  const previewState =
+    typeof studio?.previewState === "string"
+      ? studio.previewState
+      : previewStateFromUrl(previewUrl);
   return {
     ...row,
     previewUrl,
@@ -53,7 +57,7 @@ function mapTrack(row: Track): Track {
         studio && "analysisStatus" in studio
           ? studio.analysisStatus
           : analysisStatusFromReadiness(readiness, !row.artist.trim()),
-      previewState: previewStateFromUrl(previewUrl),
+      previewState,
     },
   } as Track;
 }
@@ -69,7 +73,7 @@ export class CloudAdapter implements CloudRuntimeAdapter {
       /\/$/,
       "",
     );
-    this.requestFetch = options.fetch ?? fetch;
+    this.requestFetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.getAccessToken = options.getAccessToken;
   }
 

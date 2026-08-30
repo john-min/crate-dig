@@ -6,8 +6,14 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(appRoot, "../..");
 
 const appMode = process.env.NEXT_PUBLIC_APP_MODE;
-if (appMode !== "mock" && appMode !== "local" && appMode !== "cloud") {
-  process.env.NEXT_PUBLIC_APP_MODE = "mock";
+if (
+  appMode !== "mock" &&
+  appMode !== "local" &&
+  appMode !== "cloud" &&
+  appMode !== "preview"
+) {
+  process.env.NEXT_PUBLIC_APP_MODE =
+    process.env.VERCEL_ENV === "preview" ? "preview" : "mock";
 }
 
 const nextConfig: NextConfig = {

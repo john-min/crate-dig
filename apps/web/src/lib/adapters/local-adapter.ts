@@ -161,7 +161,7 @@ export class LocalAdapter implements LocalRuntimeAdapter {
 
   constructor(options: LocalAdapterOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-    this.requestFetch = options.fetch ?? fetch;
+    this.requestFetch = options.fetch ?? ((input, init) => fetch(input, init));
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

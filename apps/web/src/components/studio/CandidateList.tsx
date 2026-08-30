@@ -1,15 +1,26 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { TRACK_ROW_HEIGHT } from "@/lib/studio/constants";
 import { useStudio } from "./StudioProvider";
 import { TrackRow } from "./TrackRow";
 
-export function CandidateList() {
+export function CandidateList({ embedded = false }: { embedded?: boolean } = {}) {
   const s = useStudio();
-  const rowH = s.density === "compact" ? 38 : 40;
+  const rowH = TRACK_ROW_HEIGHT[s.density];
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(280);
+
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setHeight(el.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const items = s.candidates;
   const start = Math.max(0, Math.floor(scrollTop / rowH) - 4);
@@ -21,41 +32,23 @@ export function CandidateList() {
     ? `Near selected · ${items.length} candidates`
     : `Records in view · ${items.length}`;
 
-  const onRef = (el: HTMLDivElement | null) => {
-    scroller.current = el;
-    if (el) setHeight(el.clientHeight);
-  };
-
   const playingId = s.playing?.id;
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col overflow-hidden border-t border-line bg-ink"
+      className={`flex h-full min-h-0 flex-col overflow-hidden bg-[#0D0F13] ${embedded ? "" : "border-t border-[#1B1F27]"}`}
       aria-label="Candidate tracks"
     >
+      {embedded ? null : (
       <div className="flex h-9 shrink-0 items-center justify-between px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="truncate text-[12.5px] font-semibold text-paper">{header}</h2>
-          {!s.analysisReady ? (
-            <a href="/analysis" className="shrink-0 text-[11.5px] font-medium text-amber hover:text-paper">
-              Run analysis
-            </a>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="text-[11.5px] text-paper-dim hover:text-paper"
-            aria-pressed={s.density === "compact"}
-            onClick={() => s.setDensity(s.density === "compact" ? "comfortable" : "compact")}
-          >
-            {s.density === "compact" ? "Comfortable rows" : "Compact rows"}
-          </button>
         </div>
       </div>
+      )}
       <div
         role="rowgroup"
-        className="hidden h-7 shrink-0 items-center px-[var(--pad-panel)] text-[11px] font-semibold tracking-[0.06em] text-muted uppercase md:grid md:grid-cols-[30px_minmax(0,3fr)_minmax(0,1.8fr)_54px_42px_minmax(0,1.4fr)_96px_68px] md:gap-2"
+        className="sticky top-0 hidden h-7 shrink-0 items-center bg-[#0D0F13] px-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#5B6373] md:grid md:grid-cols-[28px_2.1fr_1.3fr_56px_44px_1fr_74px] md:gap-3"
       >
         <span />
         <span>Title</span>
@@ -63,11 +56,10 @@ export function CandidateList() {
         <span>BPM</span>
         <span>Key</span>
         <span>Vibe</span>
-        <span>Match</span>
         <span />
       </div>
       <div
-        ref={onRef}
+        ref={scroller}
         className="min-h-0 flex-1 overflow-auto"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       >

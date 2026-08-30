@@ -5,48 +5,41 @@ import { useStudio } from "./StudioProvider";
 export function FilterChipBar() {
   const s = useStudio();
   const { filters } = s;
+  const bpmActive = filters.bpmMin > s.bpmBounds.min || filters.bpmMax < s.bpmBounds.max;
   const bpmLabel = `${Math.round(filters.bpmMin)}–${Math.round(filters.bpmMax)}`;
-  const keyLabel = filters.compatibleKeys
-    ? `${s.seed?.key ?? "8A"} +1`
-    : filters.keys[0] ?? null;
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto border-b border-[var(--hairline)] px-3 py-2">
+    <div className="flex items-center gap-2 overflow-x-auto border-b border-[#1B1F27] px-3 py-2">
       {filters.moods.map((mood) => (
         <Chip
           key={mood}
           label={mood}
           active
-          onClick={() =>
-            s.setFilters({ ...filters, moods: filters.moods.filter((m) => m !== mood) })
-          }
+          onClick={() => s.setFilters({ ...filters, moods: filters.moods.filter((item) => item !== mood) })}
         />
       ))}
       {filters.energies.map((energy) => (
         <Chip
           key={energy}
           label={energy}
+          active
           onClick={() =>
-            s.setFilters({
-              ...filters,
-              energies: filters.energies.filter((e) => e !== energy),
-            })
+            s.setFilters({ ...filters, energies: filters.energies.filter((item) => item !== energy) })
           }
         />
       ))}
-      <Chip
-        label={bpmLabel}
-        active={filters.bpmMin > 108 || filters.bpmMax < 136}
-        onClick={() => s.setAdvancedOpen(true)}
-      />
-      {keyLabel ? (
-        <Chip label={keyLabel} active={filters.compatibleKeys || filters.keys.length > 0} onClick={() => s.setAdvancedOpen(true)} />
-      ) : (
-        <Chip label="8A +1" onClick={() => s.setFilters({ ...filters, compatibleKeys: true })} />
-      )}
+      {filters.keys.map((key) => (
+        <Chip
+          key={key}
+          label={key}
+          active
+          onClick={() => s.setFilters({ ...filters, keys: filters.keys.filter((item) => item !== key) })}
+        />
+      ))}
+      <Chip label={bpmLabel} active={bpmActive} onClick={() => s.setAdvancedOpen(true)} />
       <button
         type="button"
-        className="ml-auto shrink-0 text-[12px] text-paper-dim hover:text-paper"
+        className="ml-auto shrink-0 text-[12px] text-[#98A0AE] hover:text-[#EDEFF3]"
         onClick={() => s.setAdvancedOpen(true)}
       >
         Filters
@@ -69,7 +62,7 @@ function Chip({
       type="button"
       onClick={onClick}
       className={`h-7 shrink-0 rounded-full px-2.5 text-[11.5px] capitalize ${
-        active ? "bg-violet/25 text-paper" : "border border-line text-paper-dim hover:text-paper"
+        active ? "bg-[#241C3D] text-[#C4B6F5]" : "border border-[#262B34] text-[#98A0AE] hover:text-[#EDEFF3]"
       }`}
     >
       {label}
