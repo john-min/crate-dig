@@ -535,37 +535,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-neighbors", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.from_snapshot:
-        snapshot = json.loads(args.from_snapshot.read_text())
-    else:
-        url, secret = resolve_supabase_env(args.env_file)
-        snapshot = fetch_cloud_snapshot(
-            Rest(url, secret),
-            library_id=args.library_id,
-            run_id=args.run_id,
-        )
-        if args.dump_snapshot:
-            args.dump_snapshot.parent.mkdir(parents=True, exist_ok=True)
-            args.dump_snapshot.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
-
-    settings = Settings.from_env()
-    conn = db.connect(settings.sqlite_path)
     try:
-        summary = import_cloud_snapshot(
-            conn,
-            snapshot,
-            audio_root=args.audio_root.expanduser() if args.audio_root else None,
-            materialize_neighbors=not args.skip_neighbors,
-        )
-    finally:
-        conn.close()
-    print(json.dumps(summary, sort_keys=True, default=str))
-    return 0
+        if args.from_snapshot:
+            snapshot = json.loads(args.from_snapshot.read_text())
+        else:
+            url, secret = resolve_supabase_env(args.env_file)
+            snapshot = fetch_cloud_snapshot(
+                Rest(url, secret),
+                library_id=args.library_id,
+                run_id=args.run_id,
+            )
+            if args.dump_snapshot:
+                args.dump_snapshot.parent.mkdir(parents=True, exist_ok=True)
+                args.dump_snapshot.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+
+        settings = Settings.from_env()
+        conn = db.connect(settings.sqlite_path)
+        try:
+            summary = import_cloud_snapshot(
+                conn,
+                snapshot,
+                audio_root=args.audio_root.expanduser() if args.audio_root else None,
+                materialize_neighbors=not args.skip_neighbors,
+            )
+        finally:
+            conn.close()
+        print(json.dumps(summary, sort_keys=True, default=str))
+        return 0
+    except HydrateError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except HydrateError as error:
-        print(str(error), file=sys.stderr)
-        raise SystemExit(1) from error
+    raise SystemExit(main())

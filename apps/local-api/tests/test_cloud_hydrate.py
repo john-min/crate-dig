@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from cratedig_local_api.app import create_app
-from cratedig_local_api.cloud_hydrate import import_cloud_snapshot, resolve_audio_location
+from cratedig_local_api.cloud_hydrate import import_cloud_snapshot, main, resolve_audio_location
 from cratedig_local_api.migrations import LATEST_SCHEMA_VERSION
 from cratedig_local_api.settings import Settings
 from cratedig_local_api import db
@@ -54,6 +54,22 @@ def test_hydrate_resolves_rekordbox_usb_layout(tmp_path: Path):
         tmp_path / "usb",
     )
     assert Path(location) == target.resolve()
+
+
+def test_cli_without_supabase_secrets_fails_closed(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.delenv("NEXT_PUBLIC_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CRATE_DIG_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.setenv("CRATE_DIG_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "cratedig_local_api.cloud_hydrate.load_env_file",
+        lambda _path: {},
+    )
+    assert main([]) == 1
+    captured = capsys.readouterr()
+    assert "SUPABASE_SECRET_KEY" in captured.err
 
 
 def test_local_api_serves_hydrated_catalog(tmp_path: Path):
