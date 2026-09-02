@@ -22,6 +22,7 @@ describe("desktop runtime composition", () => {
     expect(hasLocalImport(runtime.adapter)).toBe(true);
     expect(hasCloudUpload(runtime.adapter)).toBe(false);
     expect("getAuthSession" in runtime.adapter).toBe(true);
+    expect(runtime.projection).toBeDefined();
   });
 });
 
@@ -138,6 +139,62 @@ describe("DesktopAdapter", () => {
     ).toBe(true);
     const imported = await adapter.importFolder({ folderPath: "/Music" });
     expect(imported.libraryId).toBe("lib-1");
+  });
+
+  it("maps imported Cloud Run projection without a per-track analysis fetch", async () => {
+    const calls: string[] = [];
+    const adapter = new DesktopAdapter({
+      fetch: async (input) => {
+        calls.push(String(input));
+        if (String(input).endsWith("/tracks")) {
+          return jsonResponse({
+            tracks: [
+              {
+                id: "trk-1",
+                library_id: "lib-demo",
+                title: "Don't Slip",
+                artist: "1905",
+                album: "",
+                genre: "G-House",
+                label: "Former City",
+                bpm: 139,
+                key: "11A",
+                duration_sec: 209,
+                location: "demo/originals/dont-slip.mp3",
+                location_kind: "file",
+                missing: true,
+                created_at: "2026-08-15T00:00:00Z",
+                date_added: "2026-07-10",
+                preview_url: null,
+                rating: 2,
+                energy_rating: 5,
+                umap_x: 1.25,
+                umap_y: 0.4,
+                cluster_index: 0,
+                cluster_name: "bright & driving · 139 BPM",
+                suggested_moment: "Peak time",
+                analysis_state: "completed",
+                rekordbox_track_id: null,
+                audio_content_hash: null,
+                bpm_source: "cloud",
+                key_source: "cloud",
+              },
+            ],
+          });
+        }
+        return jsonResponse({ detail: "missing" }, 404);
+      },
+    });
+    const tracks = await adapter.listTracks();
+    expect(tracks[0]?.readiness).toBe("ready_fast");
+    expect(
+      (tracks[0] as Track & { studio?: Record<string, unknown> }).studio,
+    ).toMatchObject({
+      umap_x: 1.25,
+      clusterName: "bright & driving · 139 BPM",
+      energy: "driving",
+    });
+    expect(calls.some((call) => call.includes("/analysis"))).toBe(false);
   });
 
   it("does not mark a missing preview ready", async () => {

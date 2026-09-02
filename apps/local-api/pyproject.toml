@@ -27,6 +27,7 @@ dev = [
 cratedig-local-api = "cratedig_local_api.app:main"
 cratedig-local-worker = "cratedig_local_api.worker:main"
 cratedig-materialize-neighbors = "cratedig_local_api.similarity:main"
+cratedig-hydrate-cloud-library = "cratedig_local_api.cloud_hydrate:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

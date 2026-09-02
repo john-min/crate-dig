@@ -1,6 +1,5 @@
 import {
-  analysisStatusFromReadiness,
-  previewStateFromUrl,
+  mapLocalCatalogTrack,
   readinessFromAnalysisEvidence,
 } from "@crate-dig/app-core";
 import type {
@@ -15,6 +14,8 @@ import type {
   Neighbor,
   NeighborOptions,
   PlaybackUrl,
+  ProjectionMapFeed,
+  Readiness,
   Track,
   TrackAnalysis,
   components,
@@ -22,7 +23,15 @@ import type {
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
 import { AdapterError, normalizeAdapterError } from "./errors";
 
-type LocalTrack = components["schemas"]["TrackResponse"];
+type LocalTrack = components["schemas"]["TrackResponse"] & {
+  energy_rating?: number | null;
+  umap_x?: number | null;
+  umap_y?: number | null;
+  cluster_index?: number | null;
+  cluster_name?: string | null;
+  suggested_moment?: string | null;
+  analysis_state?: string | null;
+};
 type LocalAnalysisRun = components["schemas"]["AnalysisRunResponse"];
 type LocalTrackAnalysis = components["schemas"]["TrackAnalysisResponse"];
 type LocalRunTrack = components["schemas"]["AnalysisRunTrackResponse"];
@@ -32,24 +41,6 @@ export interface DesktopAdapterOptions {
   fetch?: typeof fetch;
   getAuthSession?: () => Promise<AuthSession | null>;
 }
-
-type StudioFields = {
-  key: string | null;
-  genre: string;
-  label: string;
-  durationSec: number;
-  mood: "warm";
-  energy: "medium";
-  textures: ["minimal"];
-  cluster: number;
-  clusterName: string;
-  suggestedMoment: string;
-  tags: string[];
-  analysisStatus: ReturnType<typeof analysisStatusFromReadiness>;
-  previewState: ReturnType<typeof previewStateFromUrl>;
-  loudnessLufs: null;
-  energyScore: null;
-};
 
 function mapLibrary(row: components["schemas"]["LibraryResponse"]): Library {
   return {
@@ -61,50 +52,13 @@ function mapLibrary(row: components["schemas"]["LibraryResponse"]): Library {
   };
 }
 
-function mapTrack(row: LocalTrack, baseUrl: string, analysis?: TrackAnalysis | null): Track {
-  const previewUrl = row.preview_url ? new URL(row.preview_url, `${baseUrl}/`).toString() : null;
-  const readiness = analysis ? readinessFromTrackOrEvidence(analysis) : "imported";
-  const studio: StudioFields = {
-    key: row.key,
-    genre: row.genre,
-    label: row.label,
-    durationSec: row.duration_sec ?? 0,
-    mood: "warm",
-    energy: "medium",
-    textures: ["minimal"],
-    cluster: 0,
-    clusterName: "Unanalyzed",
-    suggestedMoment: "Local file",
-    tags: ["local"],
-    analysisStatus: analysisStatusFromReadiness(readiness, !row.artist.trim()),
-    previewState: previewStateFromUrl(previewUrl),
-    loudnessLufs: null,
-    energyScore: null,
-  };
-  return {
-    id: row.id,
-    libraryId: row.library_id,
-    title: row.title || row.location.split("/").pop() || "Untitled",
-    artist: row.artist || "Unknown artist",
-    bpm: row.bpm,
-    musicalKey: row.key ?? undefined,
-    previewUrl,
-    createdAt: row.created_at,
-    readiness,
-    studio,
-  } as Track;
+function hasImportedProjection(row: LocalTrack): boolean {
+  return row.analysis_state != null || (row.umap_x != null && row.umap_y != null);
 }
 
-function readinessFromTrackOrEvidence(analysis: TrackAnalysis) {
-  return (
-    analysis.readiness ??
-    readinessFromAnalysisEvidence({
-      state: analysis.state,
-      stages: analysis.stages,
-      features: analysis.features,
-      embeddings: analysis.embeddings,
-    })
-  );
+function mapTrack(row: LocalTrack, baseUrl: string, analysis?: TrackAnalysis | null): Track {
+  const previewUrl = row.preview_url ? new URL(row.preview_url, `${baseUrl}/`).toString() : null;
+  return mapLocalCatalogTrack(row, { previewUrl, analysis });
 }
 
 function mapRun(row: LocalAnalysisRun): AnalysisRun {
@@ -222,7 +176,15 @@ export class DesktopAdapter implements DesktopRuntimeAdapter {
     const offset = options.offset ?? 0;
     const end = options.limit == null ? undefined : offset + options.limit;
     const rows = filtered.slice(offset, end);
-    return Promise.all(rows.map(async (row) => mapTrack(row, this.baseUrl, await this.analysisFor(row.id))));
+    return Promise.all(
+      rows.map(async (row) =>
+        mapTrack(
+          row,
+          this.baseUrl,
+          hasImportedProjection(row) ? null : await this.analysisFor(row.id),
+        ),
+      ),
+    );
   }
 
   async getTrack(trackId: string): Promise<Track> {
@@ -314,6 +276,31 @@ export class DesktopAdapter implements DesktopRuntimeAdapter {
 
   async getPlaybackUrl(trackId: string): Promise<PlaybackUrl> {
     return { url: `${this.baseUrl}/audio/${encodeURIComponent(trackId)}` };
+  }
+
+  async getProjectionMapFeed(): Promise<ProjectionMapFeed> {
+    const body = await this.request<{
+      projection_version: string;
+      model_set_version: string;
+      points: Array<{
+        track_id: string;
+        x: number;
+        y: number;
+        cluster_id?: string | null;
+        readiness?: string;
+      }>;
+    }>("/projection");
+    return {
+      projectionVersion: body.projection_version,
+      modelSetVersion: body.model_set_version,
+      points: body.points.map((point) => ({
+        trackId: point.track_id,
+        x: point.x,
+        y: point.y,
+        clusterId: point.cluster_id ?? undefined,
+        readiness: (point.readiness as Readiness | undefined) ?? "ready_fast",
+      })),
+    };
   }
 
   async importFolder(input: ImportFolderInput): Promise<ImportResult> {

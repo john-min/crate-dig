@@ -6,10 +6,14 @@ export function createDesktopRuntime(options: {
   localApiUrl: string;
   getAuthSession?: () => Promise<AuthSession | null>;
 }): DesktopRuntimeComposition {
+  const adapter = new DesktopAdapter({
+    baseUrl: options.localApiUrl,
+    getAuthSession: options.getAuthSession,
+  });
   return {
-    adapter: new DesktopAdapter({
-      baseUrl: options.localApiUrl,
-      getAuthSession: options.getAuthSession,
-    }),
+    adapter,
+    projection: {
+      getProjectionMapFeed: () => adapter.getProjectionMapFeed(),
+    },
   };
 }

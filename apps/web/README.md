@@ -63,6 +63,12 @@ streams through Vercel.
 
 That catalog is public on the Preview URL — only put demo audio in those prefixes.
 
+Preview/cloud catalog mapping also reads the latest completed `analysis_runs` row for
+that demo library (`clusters` + `cluster_members.umap_x/y`). Apply
+`supabase/migrations/20260902000000_demo_cluster_rls.sql` so authenticated clients can
+read those coordinates. Localhost and desktop copy the same rows into SQLite with
+`cratedig-hydrate-cloud-library` (see `LOCALHOST_APP_SPEC.md`).
+
 CORS origins must include `http://localhost:3000`, `http://localhost:3001`, and the
 Preview hostname (scheme+host only). Allow `GET` / `HEAD` / `Range`.
 

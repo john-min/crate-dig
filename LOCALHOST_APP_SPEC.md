@@ -69,6 +69,8 @@ contract. Current routes include:
 - `GET /tracks`
 - `GET /tracks/{track_id}`
 - `GET /libraries/{library_id}/tracks`
+- `GET /projection`
+- `GET /libraries/{library_id}/projection`
 - `POST /imports/folder`
 - `POST /libraries/{library_id}/metadata/import-csv`
 - `GET /audio/{track_id}` with HTTP Range support
@@ -100,9 +102,27 @@ no `/imports/rekordbox-xml` HTTP route today.
 - `GET /evaluation-sets/{evaluation_set_id}/report`
 
 The local API implementation and generated OpenAPI document are authoritative over older
-route sketches. There are currently no map, crate, export, generic similarity-search, or
-analysis-run `/map`/`similar` routes. Do not build clients against those nonexistent
-paths.
+route sketches. `GET /projection` returns the latest completed Cloud Run / imported
+cluster membership (UMAP x/y). There are currently no crate, export, generic
+similarity-search, or analysis-run `/map`/`similar` routes.
+
+## Shared cloud library hydrate
+
+Localhost web and desktop share `${CRATE_DIG_HOME}/crate-dig.sqlite`. To copy the same
+demo catalog web-dev reads from Supabase, plus the latest completed Cloud Run analysis:
+
+```bash
+uv run --project apps/local-api cratedig-hydrate-cloud-library
+```
+
+Reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY` from `apps/web/.env.local`,
+the repo `.env`, or the process environment. Optional `--audio-root` remaps Rekordbox
+`Contents/...` object keys onto a local USB/folder so playback works; without it the map
+and neighbors still load and missing files stay `missing`. `--from-snapshot` hydrates a
+checked-in JSON dump for tests and offline machines.
+
+The command is idempotent. It preserves Supabase track/run ids, writes clusters and UMAP
+coordinates, and materializes `librosa-zscore-v1` neighbors from imported embeddings.
 
 ## Current web integration
 

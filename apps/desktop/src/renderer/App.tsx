@@ -5,7 +5,7 @@ import {
   type StudioFilters,
   type StudioTrack,
 } from "@crate-dig/app-core";
-import type { ImportResult, Neighbor, Track } from "@crate-dig/contracts";
+import type { ImportResult, Neighbor, ProjectionPoint, Track } from "@crate-dig/contracts";
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
 import type { CloudSyncState, SidecarSnapshot } from "../shared/native-api";
 import { createDesktopRuntime } from "./adapter/runtime";
@@ -30,6 +30,7 @@ export function App() {
   const [sidecar, setSidecar] = useState<SidecarSnapshot | null>(null);
   const [cloud, setCloud] = useState<CloudSyncState | null>(null);
   const [tracks, setTracks] = useState<readonly Track[]>([]);
+  const [projectionById, setProjectionById] = useState<Map<string, ProjectionPoint>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [neighbors, setNeighbors] = useState<readonly Neighbor[]>([]);
   const [listening, setListening] = useState(false);
@@ -46,16 +47,20 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
-  const adapter = useMemo(() => {
+  const runtime = useMemo(() => {
     const baseUrl = sidecar?.baseUrl;
     if (!baseUrl || !native) return null;
     return createDesktopRuntime({
       localApiUrl: baseUrl,
       getAuthSession: async () => (await native.getCloudSyncState()).session,
-    }).adapter;
+    });
   }, [native, sidecar?.baseUrl]);
+  const adapter = runtime?.adapter ?? null;
 
-  const studioTracks = useMemo(() => tracks.map((track) => mapTrackToStudio(track)), [tracks]);
+  const studioTracks = useMemo(
+    () => tracks.map((track) => mapTrackToStudio(track, projectionById.get(track.id))),
+    [tracks, projectionById],
+  );
   const bounds = useMemo(() => bpmBoundsFromTracks(studioTracks), [studioTracks]);
   const selected = studioTracks.find((track) => track.id === selectedId) ?? null;
   const visible = useMemo(
@@ -73,11 +78,18 @@ export function App() {
   const refreshLibrary = useCallback(async () => {
     if (!adapter) return;
     try {
-      setTracks(await adapter.listTracks({ limit: 400 }));
+      const [records, feed] = await Promise.all([
+        adapter.listTracks(),
+        runtime?.projection?.getProjectionMapFeed().catch(() => undefined),
+      ]);
+      setTracks(records);
+      setProjectionById(
+        new Map(feed?.points.map((point) => [point.trackId, point]) ?? []),
+      );
     } catch (error) {
       setSurfaceMessage(normalizeAdapterError(error).message);
     }
-  }, [adapter]);
+  }, [adapter, runtime?.projection]);
 
   useEffect(() => {
     if (!native) return;

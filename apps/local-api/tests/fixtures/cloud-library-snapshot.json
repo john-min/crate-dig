@@ -1,0 +1,172 @@
+{
+  "library": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Crate Dig demo",
+    "source": "demo",
+    "created_at": "2026-08-15T00:00:00+00:00",
+    "updated_at": "2026-08-15T00:00:00+00:00"
+  },
+  "tracks": [
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "library_id": "11111111-1111-4111-8111-111111111111",
+      "external_track_id": "r2-ede5b52f5ad3816f",
+      "title": "Don't Slip",
+      "artist": "1905",
+      "album": "",
+      "genre": "G-House",
+      "label": "Former City",
+      "bpm": 139.0,
+      "key": "11A",
+      "duration_sec": 209.0,
+      "rating": 2,
+      "energy_rating": 5,
+      "date_added": "2026-07-10",
+      "original_location": "demo/originals/jeff-usb-2026-08-15/Contents/1905/UnknownAlbum/dont-slip.mp3",
+      "created_at": "2026-08-15T00:00:00+00:00"
+    },
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "library_id": "11111111-1111-4111-8111-111111111111",
+      "external_track_id": "r2-2b9768423c611082",
+      "title": "Murder Weapon",
+      "artist": "16 Bit Lolitas",
+      "album": "",
+      "genre": "Progressive House",
+      "label": "Anjunadeep",
+      "bpm": 125.0,
+      "key": "9A",
+      "duration_sec": 596.0,
+      "rating": 3,
+      "energy_rating": 7,
+      "date_added": "2023-04-03",
+      "original_location": "demo/originals/jeff-usb-2026-08-15/Contents/16 Bit Lolitas/UnknownAlbum/murder-weapon.mp3",
+      "created_at": "2026-08-15T00:00:01+00:00"
+    },
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "library_id": "11111111-1111-4111-8111-111111111111",
+      "external_track_id": "r2-50ce88c0b2d84680",
+      "title": "Not The Only One",
+      "artist": "16BL",
+      "album": "Anjunadeep 07",
+      "genre": "Deep House",
+      "label": "Anjunadeep",
+      "bpm": 120.0,
+      "key": "9A",
+      "duration_sec": 392.0,
+      "rating": 2,
+      "energy_rating": 6,
+      "date_added": "2026-06-18",
+      "original_location": "demo/originals/jeff-usb-2026-08-15/Contents/16BL/Anjunadeep 07/not-the-only-one.mp3",
+      "created_at": "2026-08-15T00:00:02+00:00"
+    }
+  ],
+  "analysis_run": {
+    "id": "22222222-2222-4222-8222-222222222222",
+    "library_id": "11111111-1111-4111-8111-111111111111",
+    "mode": "fast",
+    "backend_name": "librosa",
+    "status": "completed",
+    "pipeline_version": "1.0.0",
+    "model_version": "librosa",
+    "feature_schema_version": "1.0.0",
+    "tracks_total": 3,
+    "tracks_done": 3,
+    "created_at": "2026-09-01T12:00:00+00:00",
+    "started_at": "2026-09-01T12:00:01+00:00",
+    "finished_at": "2026-09-01T12:08:00+00:00"
+  },
+  "track_features": [
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "status": "ok",
+      "features": { "energy_rms": 0.42, "brightness": 0.61 },
+      "created_at": "2026-09-01T12:02:00+00:00"
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "status": "ok",
+      "features": { "energy_rms": 0.55, "brightness": 0.48 },
+      "created_at": "2026-09-01T12:03:00+00:00"
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "status": "ok",
+      "features": { "energy_rms": 0.33, "brightness": 0.29 },
+      "created_at": "2026-09-01T12:04:00+00:00"
+    }
+  ],
+  "track_embeddings": [
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "model_name": "librosa",
+      "dimensions": 4,
+      "embedding_raw": [1.0, 0.0, 0.0, 0.0]
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "model_name": "librosa",
+      "dimensions": 4,
+      "embedding_raw": [0.9, 0.1, 0.0, 0.0]
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "model_name": "librosa",
+      "dimensions": 4,
+      "embedding_raw": [0.0, 0.0, 1.0, 0.0]
+    }
+  ],
+  "clusters": [
+    {
+      "id": "33333333-3333-4333-8333-333333333331",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "cluster_index": 0,
+      "name": "bright & driving · 139 BPM",
+      "suggested_moment": "Peak time",
+      "track_count": 2,
+      "created_at": "2026-09-01T12:08:00+00:00"
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333332",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "cluster_index": 1,
+      "name": "round & warm · 120 BPM",
+      "suggested_moment": "Sunset / golden hour",
+      "track_count": 1,
+      "created_at": "2026-09-01T12:08:00+00:00"
+    }
+  ],
+  "cluster_members": [
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "cluster_id": "33333333-3333-4333-8333-333333333331",
+      "umap_x": 1.25,
+      "umap_y": 0.4,
+      "suggested_moment": "Peak time"
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "cluster_id": "33333333-3333-4333-8333-333333333331",
+      "umap_x": 1.05,
+      "umap_y": 0.22,
+      "suggested_moment": "Peak time"
+    },
+    {
+      "track_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "analysis_run_id": "22222222-2222-4222-8222-222222222222",
+      "cluster_id": "33333333-3333-4333-8333-333333333332",
+      "umap_x": -0.8,
+      "umap_y": -0.35,
+      "suggested_moment": "Sunset / golden hour"
+    }
+  ]
+}

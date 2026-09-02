@@ -392,6 +392,42 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             "create index track_metadata_sources_source_track_idx on track_metadata_sources (source_type, source_track_id)",
         ),
     ),
+    Migration(
+        7,
+        "cloud_import_projection",
+        (
+            "alter table tracks add column energy_rating integer",
+            "alter table tracks add column external_track_id text not null default ''",
+            "create index tracks_external_track_id_idx on tracks (library_id, external_track_id)",
+            """
+            create table clusters (
+              id text primary key,
+              analysis_run_id text not null references analysis_runs (id) on delete cascade,
+              cluster_index integer not null,
+              name text not null default '',
+              suggested_moment text not null default '',
+              track_count integer not null default 0,
+              created_at text not null,
+              unique (analysis_run_id, cluster_index)
+            )
+            """,
+            "create index clusters_run_idx on clusters (analysis_run_id, cluster_index)",
+            """
+            create table cluster_members (
+              analysis_run_id text not null references analysis_runs (id) on delete cascade,
+              track_id text not null references tracks (id) on delete cascade,
+              cluster_id text references clusters (id) on delete set null,
+              umap_x real not null,
+              umap_y real not null,
+              suggested_moment text not null default '',
+              created_at text not null,
+              primary key (analysis_run_id, track_id)
+            )
+            """,
+            "create index cluster_members_track_idx on cluster_members (track_id, analysis_run_id)",
+            "create index cluster_members_cluster_idx on cluster_members (cluster_id)",
+        ),
+    ),
 )
 
 

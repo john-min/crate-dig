@@ -39,12 +39,17 @@ export function createWebRuntime(
           catalogPath: "/api/preview/catalog",
         }),
       };
-    case "local":
+    case "local": {
+      const adapter = new LocalAdapter({
+        baseUrl: environment.localApiUrl,
+      });
       return {
-        adapter: new LocalAdapter({
-          baseUrl: environment.localApiUrl,
-        }),
+        adapter,
+        projection: {
+          getProjectionMapFeed: () => adapter.getProjectionMapFeed(),
+        },
       };
+    }
     case "cloud":
       return {
         adapter: new CloudAdapter({

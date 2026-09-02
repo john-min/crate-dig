@@ -311,6 +311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{library_id}/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Library Projection */
+        get: operations["library_projection_libraries__library_id__projection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{library_id}/tracks": {
         parameters: {
             query?: never;
@@ -320,6 +337,23 @@ export interface paths {
         };
         /** Library Tracks */
         get: operations["library_tracks_libraries__library_id__tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projection */
+        get: operations["projection_projection_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1024,6 +1058,37 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ProjectionFeedResponse */
+        ProjectionFeedResponse: {
+            /** Library Id */
+            library_id?: string | null;
+            /** Model Set Version */
+            model_set_version: string;
+            /** Points */
+            points: components["schemas"]["ProjectionPointResponse"][];
+            /** Projection Version */
+            projection_version: string;
+            /** Run Id */
+            run_id: string | null;
+        };
+        /** ProjectionPointResponse */
+        ProjectionPointResponse: {
+            /** Cluster Id */
+            cluster_id?: string | null;
+            /** Cluster Name */
+            cluster_name?: string | null;
+            /**
+             * Readiness
+             * @default ready_fast
+             */
+            readiness: string;
+            /** Track Id */
+            track_id: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** RetryAnalysisStageRequest */
         RetryAnalysisStageRequest: {
             /** Reason */
@@ -1072,6 +1137,8 @@ export interface components {
         TrackResponse: {
             /** Album */
             album: string;
+            /** Analysis State */
+            analysis_state?: string | null;
             /** Artist */
             artist: string;
             /** Audio Content Hash */
@@ -1080,12 +1147,20 @@ export interface components {
             bpm: number | null;
             /** Bpm Source */
             bpm_source: string | null;
+            /** Cluster Index */
+            cluster_index?: number | null;
+            /** Cluster Name */
+            cluster_name?: string | null;
             /** Created At */
             created_at: string;
             /** Date Added */
             date_added: string;
             /** Duration Sec */
             duration_sec: number | null;
+            /** Energy Rating */
+            energy_rating?: number | null;
+            /** External Track Id */
+            external_track_id?: string | null;
             /** Genre */
             genre: string;
             /** Id */
@@ -1110,8 +1185,14 @@ export interface components {
             rating: number | null;
             /** Rekordbox Track Id */
             rekordbox_track_id: string | null;
+            /** Suggested Moment */
+            suggested_moment?: string | null;
             /** Title */
             title: string;
+            /** Umap X */
+            umap_x?: number | null;
+            /** Umap Y */
+            umap_y?: number | null;
         };
         /** TrackSplit */
         TrackSplit: {
@@ -1784,6 +1865,37 @@ export interface operations {
             };
         };
     };
+    library_projection_libraries__library_id__projection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectionFeedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     library_tracks_libraries__library_id__tracks_get: {
         parameters: {
             query?: never;
@@ -1802,6 +1914,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TracksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    projection_projection_get: {
+        parameters: {
+            query?: {
+                library_id?: string | null;
+                run_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectionFeedResponse"];
                 };
             };
             /** @description Validation Error */

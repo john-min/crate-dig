@@ -10,6 +10,15 @@ export {
   readinessFromTrackAnalysis,
 } from "./analysis";
 export {
+  energyFromLevel,
+  mapLocalCatalogTrack,
+  moodFromGenre,
+  normalizeCamelotKey,
+  studioFieldsFromCatalog,
+  texturesFromGenre,
+} from "./catalog";
+export type { CatalogStudioFields, CatalogStudioInput, LocalCatalogTrackRow } from "./catalog";
+export {
   BPM_BOUNDS,
   bpmBoundsFromTracks,
   activeFilterCount,
