@@ -1,5 +1,6 @@
 import { Instrument_Sans, Instrument_Serif } from "next/font/google";
 import type { Metadata } from "next";
+import { GoogleTag } from "@/components/analytics/GoogleTag";
 import "./globals.css";
 
 const sans = Instrument_Sans({
@@ -28,7 +29,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${sans.variable} ${serif.variable} h-full antialiased`}>
-      <body className="min-h-full bg-ink font-sans text-paper">{children}</body>
+      <body className="min-h-full bg-ink font-sans text-paper">
+        {children}
+        <GoogleTag />
+      </body>
     </html>
   );
 }
