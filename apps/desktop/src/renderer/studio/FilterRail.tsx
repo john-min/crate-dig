@@ -196,7 +196,7 @@ export function FilterRail(props: {
 
 function NavRow(props: { label: string; count: number; current: boolean; onClick: () => void }) {
   return (
-    <button type="button" className="nav-row" aria-current={props.current} onClick={props.onClick}>
+    <button type="button" className="nav-row" aria-current={props.current ? "true" : undefined} onClick={props.onClick}>
       {props.label}
       <span>{props.count.toLocaleString()}</span>
     </button>
