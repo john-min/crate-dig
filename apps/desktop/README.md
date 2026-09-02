@@ -45,6 +45,16 @@ preload IPC allowlist.
 
 Neighbors always request `librosa-zscore-v1` (`LOCAL_ANALYSIS_NEIGHBOR_CHANNEL`).
 
+To load the same demo library and Cloud Run analysis that web-dev uses:
+
+```bash
+CRATE_DIG_HOME="$HOME/.crate-dig" uv run --project apps/local-api cratedig-hydrate-cloud-library
+```
+
+Desktop and localhost web both read that SQLite file. Use `--audio-root` when the Rekordbox
+USB (or a copy of `Contents/`) is on disk so playback resolves. Secrets stay in
+`apps/web/.env.local`; the renderer never receives the service-role key.
+
 ## Auth
 
 Cloud sync is off until the user enables it. Only then may main load `@supabase/supabase-js` with

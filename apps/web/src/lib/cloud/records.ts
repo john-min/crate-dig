@@ -11,6 +11,14 @@ import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playb
 import { restrictDemoAudioObjects } from "@/lib/preview/r2-catalog";
 import { studioFieldsFromPreviewTags } from "@/lib/preview/studio-from-tags";
 
+type ClusterMembership = {
+  umapX: number;
+  umapY: number;
+  clusterIndex: number;
+  clusterName: string;
+  suggestedMoment: string;
+};
+
 type TrackRow = {
   id: string;
   library_id: string;
@@ -83,7 +91,7 @@ export async function ensureOwnedLibrary(
   };
 }
 
-function mapTrackRow(row: TrackRow): Track {
+function mapTrackRow(row: TrackRow, membership?: ClusterMembership): Track {
   const latestFeature = [...(row.track_features ?? [])].sort((left, right) =>
     right.created_at.localeCompare(left.created_at),
   )[0];
@@ -127,10 +135,14 @@ function mapTrackRow(row: TrackRow): Track {
     readiness,
     studio: {
       ...studio,
-      suggestedMoment: studio.genre ? studio.suggestedMoment : "Cloud upload",
-      clusterName: studio.genre || (hasAudio ? "Uploaded" : "Unanalyzed"),
+      suggestedMoment:
+        membership?.suggestedMoment || (studio.genre ? studio.suggestedMoment : "Cloud upload"),
+      clusterName:
+        membership?.clusterName || studio.genre || (hasAudio ? "Uploaded" : "Unanalyzed"),
       durationSec: row.duration_sec ?? 0,
-      cluster: 0,
+      cluster: membership?.clusterIndex ?? 0,
+      umap_x: membership?.umapX,
+      umap_y: membership?.umapY,
       analysisStatus:
         studio.analysisStatus === "ok"
           ? "ok"
@@ -148,6 +160,45 @@ const TRACK_SELECT = `
   track_embeddings ( id )
 `;
 
+export async function latestClusterMembership(
+  supabase: SupabaseClient,
+  libraryIds: readonly string[],
+): Promise<Map<string, ClusterMembership>> {
+  const membership = new Map<string, ClusterMembership>();
+  if (libraryIds.length === 0) return membership;
+  const { data: runs, error: runError } = await supabase
+    .from("analysis_runs")
+    .select("id, library_id, created_at")
+    .in("library_id", [...libraryIds])
+    .eq("status", "completed")
+    .order("created_at", { ascending: false });
+  if (runError) throw runError;
+  const latestByLibrary = new Map<string, string>();
+  for (const run of runs ?? []) {
+    if (!latestByLibrary.has(run.library_id)) {
+      latestByLibrary.set(run.library_id, run.id);
+    }
+  }
+  const runIds = [...latestByLibrary.values()];
+  if (runIds.length === 0) return membership;
+  const { data: members, error: memberError } = await supabase
+    .from("cluster_members")
+    .select("track_id, umap_x, umap_y, suggested_moment, analysis_run_id, clusters ( cluster_index, name )")
+    .in("analysis_run_id", runIds);
+  if (memberError) throw memberError;
+  for (const row of members ?? []) {
+    const cluster = Array.isArray(row.clusters) ? row.clusters[0] : row.clusters;
+    membership.set(row.track_id, {
+      umapX: Number(row.umap_x),
+      umapY: Number(row.umap_y),
+      clusterIndex: Number(cluster?.cluster_index ?? 0),
+      clusterName: String(cluster?.name || "").trim(),
+      suggestedMoment: String(row.suggested_moment || "").trim(),
+    });
+  }
+  return membership;
+}
+
 export async function listOwnedTracks(
   supabase: SupabaseClient,
   options: { libraryId?: string; query?: string; limit?: number; offset?: number } = {},
@@ -163,13 +214,21 @@ export async function listOwnedTracks(
   });
   const offset = options.offset ?? 0;
   const end = options.limit == null ? undefined : offset + options.limit;
-  return rows.slice(offset, end).map(mapTrackRow);
+  const sliced = rows.slice(offset, end);
+  const membership = await latestClusterMembership(
+    supabase,
+    [...new Set(sliced.map((row) => row.library_id))],
+  );
+  return sliced.map((row) => mapTrackRow(row, membership.get(row.id)));
 }
 
 export async function getOwnedTrack(supabase: SupabaseClient, trackId: string): Promise<Track | null> {
   const { data, error } = await supabase.from("tracks").select(TRACK_SELECT).eq("id", trackId).maybeSingle();
   if (error) throw error;
-  return data ? mapTrackRow(data as TrackRow) : null;
+  if (!data) return null;
+  const row = data as TrackRow;
+  const membership = await latestClusterMembership(supabase, [row.library_id]);
+  return mapTrackRow(row, membership.get(row.id));
 }
 
 export async function originalObjectKey(
@@ -213,11 +272,15 @@ export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<T
     .order("artist", { ascending: true })
     .order("title", { ascending: true });
   if (error) throw error;
+  const membership = await latestClusterMembership(supabase, ids);
   return ((data ?? []) as TrackRow[]).map((row) =>
-    mapTrackRow({
-      ...row,
-      audio_objects: restrictDemoAudioObjects(row.audio_objects),
-    }),
+    mapTrackRow(
+      {
+        ...row,
+        audio_objects: restrictDemoAudioObjects(row.audio_objects),
+      },
+      membership.get(row.id),
+    ),
   );
 }
 

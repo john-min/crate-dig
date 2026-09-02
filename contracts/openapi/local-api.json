@@ -1674,6 +1674,105 @@
         "title": "NeighborResponse",
         "type": "object"
       },
+      "ProjectionFeedResponse": {
+        "properties": {
+          "library_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Id"
+          },
+          "model_set_version": {
+            "title": "Model Set Version",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectionPointResponse"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "projection_version": {
+            "title": "Projection Version",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "required": [
+          "run_id",
+          "projection_version",
+          "model_set_version",
+          "points"
+        ],
+        "title": "ProjectionFeedResponse",
+        "type": "object"
+      },
+      "ProjectionPointResponse": {
+        "properties": {
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id"
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name"
+          },
+          "readiness": {
+            "default": "ready_fast",
+            "title": "Readiness",
+            "type": "string"
+          },
+          "track_id": {
+            "title": "Track Id",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "track_id",
+          "x",
+          "y"
+        ],
+        "title": "ProjectionPointResponse",
+        "type": "object"
+      },
       "RetryAnalysisStageRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1832,6 +1931,17 @@
             "title": "Album",
             "type": "string"
           },
+          "analysis_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis State"
+          },
           "artist": {
             "title": "Artist",
             "type": "string"
@@ -1869,6 +1979,28 @@
             ],
             "title": "Bpm Source"
           },
+          "cluster_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Index"
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -1887,6 +2019,28 @@
               }
             ],
             "title": "Duration Sec"
+          },
+          "energy_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Energy Rating"
+          },
+          "external_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Track Id"
           },
           "genre": {
             "title": "Genre",
@@ -1971,9 +2125,42 @@
             ],
             "title": "Rekordbox Track Id"
           },
+          "suggested_moment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Moment"
+          },
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "umap_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Umap X"
+          },
+          "umap_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Umap Y"
           }
         },
         "required": [
@@ -3086,6 +3273,45 @@
         "summary": "Import Csv Metadata"
       }
     },
+    "/libraries/{library_id}/projection": {
+      "get": {
+        "operationId": "library_projection_libraries__library_id__projection_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "library_id",
+            "required": true,
+            "schema": {
+              "title": "Library Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Projection"
+      }
+    },
     "/libraries/{library_id}/tracks": {
       "get": {
         "operationId": "library_tracks_libraries__library_id__tracks_get",
@@ -3123,6 +3349,68 @@
           }
         },
         "summary": "Library Tracks"
+      }
+    },
+    "/projection": {
+      "get": {
+        "operationId": "projection_projection_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "library_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Library Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Projection"
       }
     },
     "/tracks": {

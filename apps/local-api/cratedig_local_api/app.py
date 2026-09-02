@@ -77,13 +77,38 @@ class TrackResponse(BaseModel):
     rekordbox_track_id: str | None
     bpm_source: str | None
     key_source: str | None
+    energy_rating: int | None = None
+    external_track_id: str | None = None
     created_at: str
     missing: bool
     preview_url: str | None
+    umap_x: float | None = None
+    umap_y: float | None = None
+    cluster_index: int | None = None
+    cluster_name: str | None = None
+    suggested_moment: str | None = None
+    analysis_state: str | None = None
 
 
 class TracksResponse(BaseModel):
     tracks: list[TrackResponse]
+
+
+class ProjectionPointResponse(BaseModel):
+    track_id: str
+    x: float
+    y: float
+    cluster_id: str | None = None
+    cluster_name: str | None = None
+    readiness: str = "ready_fast"
+
+
+class ProjectionFeedResponse(BaseModel):
+    run_id: str | None
+    library_id: str | None = None
+    projection_version: str
+    model_set_version: str
+    points: list[ProjectionPointResponse]
 
 
 class FolderImportOutcome(BaseModel):
@@ -288,6 +313,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not row:
             raise HTTPException(status_code=404, detail="Track not found")
         return _public_track(row)
+
+    @app.get("/projection", response_model=ProjectionFeedResponse)
+    def projection(library_id: str | None = None, run_id: str | None = None):
+        with repository.synchronized():
+            return db.list_projection_points(conn, library_id=library_id, run_id=run_id)
+
+    @app.get("/libraries/{library_id}/projection", response_model=ProjectionFeedResponse)
+    def library_projection(library_id: str):
+        with repository.synchronized():
+            libs = {row["id"] for row in db.list_libraries(conn)}
+            if library_id not in libs:
+                raise HTTPException(status_code=404, detail="Library not found")
+            return db.list_projection_points(conn, library_id=library_id)
 
     @app.get(
         "/audio/{track_id}",
