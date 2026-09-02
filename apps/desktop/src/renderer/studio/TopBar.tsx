@@ -40,7 +40,7 @@ export function TopBar(props: {
       </button>
       <button type="button" className="ask-q" onClick={props.onAskQ}>
         <span className="q-badge">Q</span>
-        Ask Q to find, explain, or shape a crate…
+        <span className="ask-q-label">Ask Q to find, explain, or shape a crate…</span>
       </button>
       <div className="topbar-end">
         <span className={props.sidecarOk ? "sidecar-chip ok" : "sidecar-chip warn"}>{props.sidecarLabel}</span>

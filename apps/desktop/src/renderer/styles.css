@@ -155,6 +155,7 @@ button {
   display: flex;
   flex: 1;
   max-width: 280px;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   height: 36px;
@@ -164,6 +165,13 @@ button {
   background: var(--q-bg);
   color: #8b929f;
   text-align: left;
+}
+
+.ask-q-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .q-badge {
@@ -317,7 +325,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .primary,
@@ -533,9 +541,22 @@ button {
 
 .q-status {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   color: var(--ink-2);
+}
+
+.q-status > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.q-note {
+  margin: 8px 0 0;
+  padding-right: 4px;
+  color: #b39a85;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .pulse {
@@ -560,13 +581,6 @@ button {
 
 .q-card small {
   color: var(--ink-tertiary);
-}
-
-.q-note {
-  margin: 8px 0 0;
-  color: #b39a85;
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 .q-ask {
