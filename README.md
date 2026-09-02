@@ -12,6 +12,7 @@ This repository is documentation-led on `main`. Implementation lives on feature 
 - [App platform architecture](./docs/APP_PLATFORM_ARCHITECTURE.md)
 - [Web app spec](./docs/WEB_APP_SPEC.md)
 - [Desktop app spec](./docs/DESKTOP_APP_SPEC.md)
+- [Q assistant spec](./docs/Q_ASSISTANT_SPEC.md)
 - [Localhost app spec](./LOCALHOST_APP_SPEC.md)
 - [Sonic analysis PRD](./sonic_analysis_prd.md)
 - [Implementation plan](./IMPLEMENTATION_PLAN.md)
