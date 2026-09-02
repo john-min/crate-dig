@@ -58,4 +58,11 @@ describe("process boundary scan", () => {
       "fetch.bind(globalThis)",
     );
   });
+
+  it("does not hardcode a fake DJ library or invented cluster copy", () => {
+    for (const file of sourceFiles(join(root, "renderer"))) {
+      const contents = readFileSync(file, "utf8");
+      expect(contents, file).not.toMatch(/DUB CHAMBER|Undertow Pattern|Sunset lounge|1284/);
+    }
+  });
 });
