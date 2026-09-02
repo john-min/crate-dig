@@ -76,6 +76,10 @@ and requires clear user consent for any audio upload.
 5. Auto-update and optional model-download channels after rollback and checksum policy
    are proven.
 
+The checksum-verified model-download channel in stage 5 is shared: it serves both the deep
+analysis separator (HT-Demucs) and the offline Q assistant model. See
+[Q_ASSISTANT_SPEC.md](./Q_ASSISTANT_SPEC.md) for Q's runtime, model policy, and grounding.
+
 ## Scaffold acceptance
 
 - Forge/Vite/React starts without importing Next.js server code.
