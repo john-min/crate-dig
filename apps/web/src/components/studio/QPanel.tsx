@@ -1,66 +1,66 @@
 "use client";
 
+import { formatBpm, formatKey } from "@/lib/studio/format";
+import { MOOD_COLORS } from "@/lib/studio/constants";
 import { useStudio } from "./StudioProvider";
-import { formatBpm, formatKey, formatScore } from "@/lib/studio/format";
-import { IconClose } from "./icons";
+
+const PROMPTS = [
+  "Find me warm, percussive tracks around 122 BPM.",
+  "What sounds similar to this but darker?",
+  "Raise energy after this track.",
+];
 
 export function QPanel({ overlay = false }: { overlay?: boolean }) {
   const s = useStudio();
-
-  if (!s.qOpen) {
-    return null;
-  }
+  if (s.sidecar !== "q") return null;
 
   return (
     <aside
       role="complementary"
-      className={`flex h-full min-h-0 flex-col bg-[var(--panel)] transition-[transform,opacity] duration-[var(--duration-panel)] ease-[var(--ease-panel)] ${
-        overlay
-          ? "absolute inset-y-0 right-0 z-30 w-[min(var(--q-panel-width),100%)] border-l border-[var(--hairline)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
-          : "border-l border-[var(--hairline)]"
-      }`}
       aria-label="Q assistant"
+      className={`flex h-full min-h-0 flex-col bg-[#0D0F13] ${
+        overlay
+          ? "absolute inset-y-0 right-0 z-30 w-[min(var(--q-panel-width),100%)] border-l border-[#1B1F27] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+          : "border-l border-[#1B1F27]"
+      }`}
     >
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--hairline)] px-4">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-5 w-5 place-items-center rounded-[6px] border border-violet/35 bg-violet/10 text-[11px] font-semibold text-violet">
-            Q
-          </span>
-          <div>
-            <p className="text-[13px] font-semibold text-paper">Q</p>
-            <p className="text-[11px] text-muted">Contextual crate assistant</p>
-          </div>
-        </div>
+      <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-[#171B21] px-3.5">
+        <span className="grid h-[19px] w-[19px] place-items-center rounded-[6px] border border-[#3A3350] bg-[#181430] text-[10.5px] font-semibold text-[#8B7BF0]">
+          Q
+        </span>
+        <span className="text-[13px] font-semibold">Q</span>
         <button
           type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-full text-paper-dim hover:text-paper"
-          aria-label="Close Q"
-          onClick={s.closeQ}
+          className="ml-auto bg-transparent text-[14px] text-[#7C8698]"
+          aria-label="Close"
+          onClick={() => {
+            s.closeSidecar();
+            s.setMobileView("map");
+          }}
         >
-          <IconClose />
+          ✕
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3.5" role="status" aria-live="polite">
         <QBody />
       </div>
-      <form
-        className="shrink-0 border-t border-[var(--hairline)] bg-[var(--panel)] p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          s.askQ();
-        }}
-      >
-        <label className="sr-only" htmlFor="q-ask">
-          Ask Q
+      <div className="shrink-0 border-t border-[#171B21] px-3 py-[11px]">
+        <label className="flex h-[38px] items-center rounded-[9px] border border-[#2A2F39] bg-[#0F1116] px-3">
+          <span className="sr-only">Ask Q</span>
+          <input
+            value={s.qPrompt}
+            onChange={(event) => s.setQPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                s.askQ();
+              }
+            }}
+            placeholder="Ask Q to find, explain, or shape a crate…"
+            className="flex-1 bg-transparent text-[12.5px] text-[#EDEFF3] outline-none placeholder:text-[#8B929F]"
+          />
         </label>
-        <input
-          id="q-ask"
-          value={s.qPrompt}
-          onChange={(e) => s.setQPrompt(e.target.value)}
-          placeholder="Ask Q for records, transitions, or crate shape…"
-          className="h-10 w-full rounded-[var(--radius-md)] border border-line bg-ink-raised px-3 text-[12.5px] outline-none placeholder:text-muted focus:border-violet/60"
-        />
-      </form>
+      </div>
     </aside>
   );
 }
@@ -69,205 +69,155 @@ function QBody() {
   const s = useStudio();
   const status = s.qStatus;
 
-  if (status === "loading") {
-    return <p className="text-[12.5px] font-semibold leading-[18px]">Q is listening for nearby records…</p>;
+  if (status === "listening") {
+    return (
+      <div className="flex items-center gap-2.5 text-[12.5px] text-[#B7BEC9]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#8B7BF0]" style={{ animation: "breath 1.4s infinite" }} />
+        Q is listening for nearby records…
+      </div>
+    );
   }
 
   if (status === "failure") {
     return (
-      <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">Q couldn’t finish that search.</p>
-        <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Your library and crate are unchanged. Try again, or narrow by BPM, key, or mood.
+      <div className="rounded-[11px] border border-[#3A2E23] bg-[#151009] p-3.5">
+        <p className="text-[13px] font-semibold text-[#F0B896]">Q couldn’t finish that search</p>
+        <p className="mt-[7px] text-[12px] leading-[1.55] text-[#B39A85]">
+          Your library and crate are unchanged. Try again, or loosen BPM, keys, or mood.
         </p>
-        <button
-          type="button"
-          className="mt-4 h-8 rounded-full border border-line px-3 text-[11.5px] hover:border-amber/40"
-          onClick={() => s.askQ(s.qPrompt || "Find nearby records")}
-        >
-          Try again
-        </button>
       </div>
     );
   }
 
-  if (status === "no-results") {
-    if (!s.analysisReady) {
-      return (
-        <div>
-          <p className="text-[13px] font-semibold leading-[19px]">Analyze this library to unlock Q.</p>
-          <p className="mt-2 text-[12.5px] leading-[19px] text-paper-dim">
-            Playback works now. Sonic neighbors, match reasons, clusters, and crate suggestions need a
-            completed local analysis run.
-          </p>
-          <a
-            href="/analysis"
-            className="mt-4 inline-flex h-9 items-center rounded-full bg-amber px-4 text-[12px] font-semibold text-[var(--text-on-accent-dark)]"
+  if (status === "empty") {
+    return (
+      <div className="rounded-[11px] border border-[#3A2E23] bg-[#151009] p-3.5">
+        <p className="text-[13px] font-semibold text-[#F0B896]">Q didn&apos;t find a confident match</p>
+        <p className="mt-[7px] text-[12px] leading-[1.55] text-[#B39A85]">
+          Try loosening BPM, including adjacent keys, or removing the mood filter.
+        </p>
+        <div className="mt-[11px] flex flex-wrap gap-[7px]">
+          <button
+            type="button"
+            className="rounded-[7px] border border-[#4A3524] bg-[#2A1E14] px-[11px] py-1.5 text-[11.5px] text-[#F0B896]"
+            onClick={() => s.setFilters({ ...s.filters, bpmNearSeed: false, bpmMin: s.bpmBounds.min, bpmMax: s.bpmBounds.max })}
           >
-            Start local analysis
-          </a>
-        </div>
-      );
-    }
-    return (
-      <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">Neighbor ranking is unavailable.</p>
-        <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Q will not invent sonic matches. {s.filterCount ? "Active filters may also be hiding ranked neighbors. Loosen BPM, keys, or mood, or search the whole library." : "Ask for neighbors after analysis has materialized the librosa-zscore-v1 channel for this seed."}
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          <QAction onClick={() => s.setFilters({ ...s.filters, bpmNearSeed: false })}>
             Loosen BPM
-          </QAction>
-          <QAction onClick={() => s.setFilters({ ...s.filters, compatibleKeys: false, keys: [] })}>
-            Include adjacent keys
-          </QAction>
-          <QAction onClick={() => s.setFilters({ ...s.filters, moods: [] })}>Remove mood filter</QAction>
-          <QAction onClick={() => { s.clearFilters(); s.setSeed(null); }}>Search entire library</QAction>
+          </button>
+          <button
+            type="button"
+            className="rounded-[7px] border border-[#4A3524] bg-transparent px-[11px] py-1.5 text-[11.5px] text-[#D6A788]"
+            onClick={() => {
+              s.clearFilters();
+              s.setSeed(null);
+            }}
+          >
+            Search whole library
+          </button>
         </div>
       </div>
     );
   }
 
-  if (status === "multi") {
+  if (status === "found") {
     return (
       <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">
-          {s.selectedIds.length} records selected.
+        <p className="mb-1 text-[11px] text-[#6B7383]">
+          listening → found {s.qCards.length} records → applied to view
         </p>
-        <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          {s.qCards.length
-            ? "Ranked from adapter neighbor evidence for the current seed."
-            : "Q needs neighbor ranking before it can describe how these records relate."}
-        </p>
-        <CardList />
-      </div>
-    );
-  }
-
-  if (status === "crate" && s.activeCrate) {
-    return (
-      <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">
-          “{s.activeCrate.name}” has {s.activeCrate.trackIds.length} tracks.
-        </p>
-        <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          Q does not invent crate pacing, mix gaps, or ending problems. Select a seed with neighbor
-          ranking to ask for nearby records.
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          <QAction onClick={() => s.askQ("Find a bridge record")}>Ask Q for a bridge</QAction>
+        <p className="mb-3 text-[13px] leading-[1.6] text-[#B7BEC9]">“{s.qAsk}”</p>
+        <div className="mb-3.5 flex flex-wrap gap-1.5">
+          {s.qEvidence.map((chip) => (
+            <span
+              key={chip}
+              className="rounded-full border border-[#2E2648] bg-[#171226] px-2.5 py-1 text-[11px] text-[#C4B6F5]"
+            >
+              {chip}
+            </span>
+          ))}
         </div>
-      </div>
-    );
-  }
-
-  if (status === "track" && (s.primarySelected || s.seed)) {
-    const from = s.primarySelected ?? s.seed!;
-    const prototype = s.qCards.some((card) => card.nonSonic);
-    return (
-      <div>
-        <p className="text-[12.5px] font-semibold leading-[18px]">
-          {s.qCards.length
-            ? `Q found ${s.qCards.length} ranked neighbors.`
-            : "Neighbor ranking is unavailable."}
-        </p>
-        <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-          {prototype
-            ? `Layout neighbors around “${from.title}” — prototype map distance, not sonic analysis.`
-            : s.qCards.length
-              ? `Ranked from adapter neighbor evidence around “${from.title}”.`
-              : "Q will not invent sonic matches or fallback scores."}
-        </p>
-        {s.qCards.length ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <QAction onClick={() => s.qCards[0] && s.play(s.qCards[0].trackId)}>Preview all</QAction>
-            <QAction onClick={() => s.qCards[0] && s.selectTrack(s.qCards[0].trackId)}>Reveal on map</QAction>
-          </div>
-        ) : null}
-        <CardList />
+        <div className="overflow-hidden rounded-xl border border-[#262B34] bg-[#0F1116]">
+          {s.qCards.map((card) => {
+            const track = s.tracks.find((item) => item.id === card.trackId);
+            const color = card.color ?? MOOD_COLORS[track?.mood ?? ""] ?? "#8B7BF0";
+            return (
+              <div key={card.trackId} className="border-b border-[#14171C] px-[13px] py-[11px] last:border-b-0">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    aria-label={`Play ${card.title}`}
+                    className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[8px]"
+                    style={{
+                      background: `${color}1F`,
+                      border: `1px solid ${color}44`,
+                      color,
+                    }}
+                    onClick={() => s.play(card.trackId)}
+                  >
+                    ▶
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12.5px]">{card.title}</div>
+                    <div className="mt-0.5 text-[11px] text-[#8B929F]">
+                      {card.artist} · {formatBpm(card.bpm)} · {formatKey(card.key)}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex gap-3 pl-[35px]">
+                  <button
+                    type="button"
+                    className="bg-transparent p-0 text-[11px] text-[#E9A63C]"
+                    onClick={() => s.addToCrate(card.trackId)}
+                  >
+                    + Crate
+                  </button>
+                  <button
+                    type="button"
+                    className="bg-transparent p-0 text-[11px] text-[#98A0AE]"
+                    onClick={() => s.selectTrack(card.trackId)}
+                  >
+                    Show on map
+                  </button>
+                  <button
+                    type="button"
+                    className="bg-transparent p-0 text-[11px] text-[#98A0AE]"
+                    onClick={() => s.setSeed(card.trackId)}
+                  >
+                    Use as seed
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="text-[12.5px] font-semibold leading-[18px]">Where are we digging tonight?</p>
-      <p className="mt-2 text-[12px] leading-[19px] text-paper-dim">
-        Select a record, choose a nearby group, or describe the moment. Q will return records and actions, not
-        a chat thread.
+      <div className="rounded-[11px] border border-[#1F232B] bg-[#0B0D11] p-3.5">
+        <p className="text-[13px] font-semibold">Find the next record</p>
+        <p className="mt-[7px] text-[12.5px] leading-[1.6] text-[#98A0AE]">
+          Describe a vibe, a constraint, or where the set should go next. Q returns records and actions — not a
+          chat thread.
+        </p>
+      </div>
+      <p className="mb-[9px] mt-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">
+        Try asking
       </p>
-      <ul className="mt-5 flex flex-col gap-2">
-        {[
-          "Find darker options near this",
-          "Give me 3 safe transitions",
-          "Build a 45-minute warm-up crate",
-          "Show overlooked records in this cluster",
-        ].map((prompt) => (
-          <li key={prompt}>
-            <button
-              type="button"
-              onClick={() => {
-                s.setQPrompt(prompt);
-                s.askQ(prompt);
-              }}
-              className="w-full rounded-lg border border-line px-3 py-2.5 text-left text-[12px] leading-[18px] text-paper-dim hover:border-amber/35 hover:text-paper"
-            >
-              {prompt}
-            </button>
-          </li>
+      <div className="grid gap-[7px]">
+        {PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            className="w-full rounded-[9px] border border-[#1F232B] bg-[#0B0D11] px-3 py-2.5 text-left text-[12.5px] leading-[1.4] text-[#B7BEC9]"
+            onClick={() => s.askQ(prompt)}
+          >
+            {prompt}
+          </button>
         ))}
-      </ul>
-      <p className="mt-6 text-[11px] leading-4 text-muted">
-        Web demo · Q uses library metadata only. Audio files are not sent.
-      </p>
+      </div>
     </div>
-  );
-}
-
-function CardList() {
-  const s = useStudio();
-  const cards = s.qCards;
-
-  if (!cards.length) {
-    return (
-      <p className="mt-4 text-[12px] leading-[19px] text-paper-dim">
-        No ranked neighbors to show. Q will not invent scores or sonic blend copy.
-      </p>
-    );
-  }
-
-  return (
-    <ul className="mt-4 flex flex-col gap-2">
-      {cards.map((card) => (
-        <li key={card.trackId} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--raised)] px-3 py-2.5">
-          <p className="text-[12.5px] font-medium text-paper">{card.title}</p>
-          <p className="mt-0.5 text-[11px] text-paper-dim">{card.artist}</p>
-          <p className="mt-1 tabular text-[11px] text-muted">
-            {formatScore(card.score)} match · {formatBpm(card.bpm)} BPM · {formatKey(card.key)}
-            {card.nonSonic ? " · prototype layout" : ""}
-          </p>
-          <p className="mt-2 text-[11.5px] leading-[17px] text-paper-dim">{card.reason}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <QAction onClick={() => s.play(card.trackId)}>Play</QAction>
-            <QAction onClick={() => s.selectTrack(card.trackId)}>Reveal on map</QAction>
-            <QAction onClick={() => s.addToCrate(card.trackId)}>Add selected to crate</QAction>
-            <QAction onClick={() => s.hideFromRecs(card.trackId)}>Hide from this search</QAction>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function QAction({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="h-8 rounded-full border border-line px-3 text-[11.5px] text-paper hover:border-amber/40"
-    >
-      {children}
-    </button>
   );
 }

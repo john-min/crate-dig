@@ -7,6 +7,9 @@ import {
 } from "@crate-dig/app-core";
 import type { Library, Track } from "@crate-dig/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playback-object";
+import { restrictDemoAudioObjects } from "@/lib/preview/r2-catalog";
+import { studioFieldsFromPreviewTags } from "@/lib/preview/studio-from-tags";
 
 type TrackRow = {
   id: string;
@@ -18,6 +21,8 @@ type TrackRow = {
   label: string | null;
   bpm: number | null;
   key: string | null;
+  rating: number | null;
+  energy_rating: number | null;
   duration_sec: number | null;
   created_at: string;
   audio_objects?: { id: string; kind: string; object_key: string }[] | null;
@@ -31,13 +36,19 @@ export async function listOwnedLibraries(supabase: SupabaseClient): Promise<Libr
     .select("id, name, source, created_at, updated_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    source: row.source,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (data ?? [])
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      source: row.source,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+    .sort((left, right) => {
+      if (left.source === "demo" && right.source !== "demo") return -1;
+      if (right.source === "demo" && left.source !== "demo") return 1;
+      return (left.createdAt ?? "").localeCompare(right.createdAt ?? "");
+    });
 }
 
 const UUID_RE =
@@ -77,7 +88,7 @@ function mapTrackRow(row: TrackRow): Track {
     right.created_at.localeCompare(left.created_at),
   )[0];
   const embeddings = row.track_embeddings ?? [];
-  const readiness = readinessFromAnalysisEvidence({
+  const analysisReadiness = readinessFromAnalysisEvidence({
     state:
       latestFeature?.status === "ok"
         ? "completed"
@@ -87,7 +98,22 @@ function mapTrackRow(row: TrackRow): Track {
     features: latestFeature?.features,
     embeddings,
   });
-  const hasAudio = (row.audio_objects ?? []).length > 0;
+  const audioObjects = row.audio_objects ?? [];
+  const hasAudio = hasPlayableAudioObject(audioObjects);
+  const studio = studioFieldsFromPreviewTags({
+    genre: row.genre ?? "",
+    label: row.label ?? "",
+    key: row.key || undefined,
+    bpm: row.bpm ?? undefined,
+    energyLevel: row.energy_rating ?? undefined,
+  });
+  const readiness =
+    analysisReadiness === "failed"
+      ? analysisReadiness
+      : hasAudio || studio.analysisStatus === "ok"
+        ? "ready_fast"
+        : analysisReadiness;
+  // Signed URLs expire; the client fetches a fresh GET via /playback on play.
   const previewUrl = null;
   return {
     id: row.id,
@@ -95,32 +121,28 @@ function mapTrackRow(row: TrackRow): Track {
     title: row.title || "Untitled",
     artist: row.artist || "Unknown artist",
     bpm: row.bpm,
-    musicalKey: row.key || undefined,
+    musicalKey: studio.key || row.key || undefined,
     previewUrl,
     createdAt: row.created_at,
     readiness,
     studio: {
-      key: row.key,
-      genre: row.genre ?? "",
-      label: row.label ?? "",
+      ...studio,
+      suggestedMoment: studio.genre ? studio.suggestedMoment : "Cloud upload",
+      clusterName: studio.genre || (hasAudio ? "Uploaded" : "Unanalyzed"),
       durationSec: row.duration_sec ?? 0,
-      mood: "warm",
-      energy: "medium",
-      textures: ["minimal"],
       cluster: 0,
-      clusterName: hasAudio ? "Uploaded" : "Unanalyzed",
-      suggestedMoment: "Cloud upload",
-      tags: ["cloud"],
-      analysisStatus: analysisStatusFromReadiness(readiness, !row.artist.trim()),
-      previewState: previewStateFromUrl(previewUrl),
+      analysisStatus:
+        studio.analysisStatus === "ok"
+          ? "ok"
+          : analysisStatusFromReadiness(readiness, !row.artist.trim()),
+      previewState: hasAudio ? "ready" : previewStateFromUrl(previewUrl),
       loudnessLufs: null,
-      energyScore: null,
     },
   } as Track;
 }
 
 const TRACK_SELECT = `
-  id, library_id, title, artist, album, genre, label, bpm, key, duration_sec, created_at,
+  id, library_id, title, artist, album, genre, label, bpm, key, rating, energy_rating, duration_sec, created_at,
   audio_objects ( id, kind, object_key ),
   track_features ( status, features, created_at ),
   track_embeddings ( id )
@@ -161,9 +183,67 @@ export async function originalObjectKey(
     .order("created_at", { ascending: false });
   if (error) throw error;
   const rows = data ?? [];
-  return (
-    rows.find((row) => row.kind === "original")?.object_key ??
-    rows[0]?.object_key ??
-    null
+  return pickPlaybackObjectKey(rows);
+}
+
+export async function listDemoLibraries(supabase: SupabaseClient): Promise<Library[]> {
+  const { data, error } = await supabase
+    .from("libraries")
+    .select("id, name, source, created_at, updated_at")
+    .eq("source", "demo")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    source: row.source,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<Track[]> {
+  const libraries = await listDemoLibraries(supabase);
+  const ids = libraries.map((library) => library.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("tracks")
+    .select(TRACK_SELECT)
+    .in("library_id", ids)
+    .order("artist", { ascending: true })
+    .order("title", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as TrackRow[]).map((row) =>
+    mapTrackRow({
+      ...row,
+      audio_objects: restrictDemoAudioObjects(row.audio_objects),
+    }),
+  );
+}
+
+export async function demoPlaybackObjectKey(
+  supabase: SupabaseClient,
+  trackId: string,
+): Promise<string | null> {
+  const id = trackId.trim();
+  if (!id) return null;
+  const { data, error } = await supabase
+    .from("tracks")
+    .select(
+      `
+      id,
+      libraries!inner ( source ),
+      audio_objects ( kind, object_key )
+    `,
+    )
+    .eq("id", id)
+    .eq("libraries.source", "demo")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return pickPlaybackObjectKey(
+    restrictDemoAudioObjects(
+      (data as { audio_objects?: { kind: string; object_key: string }[] }).audio_objects,
+    ),
   );
 }

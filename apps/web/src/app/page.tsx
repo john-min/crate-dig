@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { LibraryMapStill } from "@/components/landing/LibraryMapStill";
+import { isAuthGatedAppMode } from "@/lib/env";
 
 const LOOP = [
   {
@@ -12,7 +13,8 @@ const LOOP = [
     copy: "Describe the vibe or direction. Q finds fitting tracks and explains the match.",
   },
   {
-    title: "Mac app—coming soon",
+    title: "Mac app",
+    badge: "Coming soon",
     copy: "Analyze and explore your own library privately, locally, and offline.",
   },
 ];
@@ -21,19 +23,23 @@ const ctaClassName =
   "h-12 items-center rounded-full bg-amber px-7 text-[15px] font-medium text-[#181203] transition-colors hover:bg-amber/90";
 
 export default function LandingPage() {
+  const gated = isAuthGatedAppMode();
+  const startHref = gated ? "/access" : "/app";
   return (
     <div className="relative min-h-dvh">
       <header className="relative z-10 flex items-center justify-between px-5 py-5 md:px-10 md:py-6">
         <Wordmark />
         <nav className="flex items-center gap-5">
+          {gated ? (
+            <Link
+              href="/login"
+              className="text-sm text-paper-dim transition-colors hover:text-paper"
+            >
+              Sign in
+            </Link>
+          ) : null}
           <Link
-            href="/login"
-            className="text-sm text-paper-dim transition-colors hover:text-paper"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/access"
+            href={startHref}
             className={`hidden h-10 px-5 text-[14px] md:inline-flex ${ctaClassName}`}
           >
             Start digging
@@ -51,10 +57,12 @@ export default function LandingPage() {
             Soon, analyze your own collection on Mac.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link href="/access" className={`inline-flex ${ctaClassName}`}>
+            <Link href={startHref} className={`inline-flex ${ctaClassName}`}>
               Start digging
             </Link>
-            <p className="text-sm text-paper-dim">Access code required</p>
+            {gated ? <p className="text-sm text-paper-dim">Access code required</p> : (
+              <p className="text-sm text-paper-dim">Preview session · crates stay until you close this tab</p>
+            )}
           </div>
 
           <LibraryMapStill className="mt-11 md:mt-12" />
@@ -67,7 +75,14 @@ export default function LandingPage() {
           <ol className="mt-10 grid gap-10 md:grid-cols-3 md:gap-16">
             {LOOP.map((step) => (
               <li key={step.title}>
-                <h3 className="text-[16px] font-semibold tracking-tight">{step.title}</h3>
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-[16px] font-semibold tracking-tight">{step.title}</h3>
+                  {step.badge ? (
+                    <span className="rounded-full border border-line bg-ink-raised px-2 py-0.5 text-[11px] font-medium text-paper-dim">
+                      {step.badge}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-2 max-w-[36ch] text-[14.5px] leading-relaxed text-paper-dim">
                   {step.copy}
                 </p>

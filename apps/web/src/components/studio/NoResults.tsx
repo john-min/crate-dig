@@ -25,8 +25,8 @@ export function NoResults() {
           onClick={() =>
             s.setFilters({
               ...s.filters,
-              bpmMin: Math.max(108, s.filters.bpmMin - 4),
-              bpmMax: Math.min(136, s.filters.bpmMax + 4),
+              bpmMin: Math.max(s.bpmBounds.min, s.filters.bpmMin - 4),
+              bpmMax: Math.min(s.bpmBounds.max, s.filters.bpmMax + 4),
               bpmNearSeed: false,
             })
           }

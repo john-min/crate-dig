@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell/AppShell";
 
 export const metadata: Metadata = { title: "Map" };
 
-/** Ungated high-fidelity discovery prototype with mock library data. */
+/** Ungated demo: Supabase source=demo metadata, R2 playback via signed GETs. */
 export default function MapDemoPage() {
-  return <AppShell signedIn={false} />;
+  return <AppShell mode="preview" signedIn={false} />;
 }

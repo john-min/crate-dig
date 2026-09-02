@@ -52,7 +52,36 @@ export type SimilarityReason = {
   kind: "shared" | "distance" | "compatible" | "warning";
 };
 
-export const BPM_BOUNDS = { min: 108, max: 136 } as const;
+export type BpmBounds = { min: number; max: number };
+
+export const BPM_BOUNDS: BpmBounds = { min: 108, max: 136 };
+
+export function bpmBoundsFromTracks(tracks: readonly { bpm?: number | null }[]): BpmBounds {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const track of tracks) {
+    const bpm = track.bpm;
+    if (bpm == null || !Number.isFinite(bpm)) continue;
+    const low = Math.floor(bpm);
+    const high = Math.ceil(bpm);
+    if (low < min) min = low;
+    if (high > max) max = high;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return { min: BPM_BOUNDS.min, max: BPM_BOUNDS.max };
+  }
+  if (min === max) {
+    return { min: Math.max(1, min - 1), max: min + 1 };
+  }
+  return { min, max };
+}
+
+export function isBpmFilterActive(
+  filters: Pick<StudioFilters, "bpmMin" | "bpmMax">,
+  bounds: BpmBounds = BPM_BOUNDS,
+): boolean {
+  return filters.bpmMin > bounds.min || filters.bpmMax < bounds.max;
+}
 
 const VALID_MOODS = new Set<Mood>(["warm", "euphoric", "dark", "dreamy", "hypnotic"]);
 const VALID_ENERGIES = new Set<Energy>(["low", "medium", "peak", "driving"]);
@@ -147,10 +176,13 @@ export function mapTrackToStudio(
   };
 }
 
-export function activeFilterCount(filters: StudioFilters): number {
+export function activeFilterCount(
+  filters: StudioFilters,
+  bounds: BpmBounds = BPM_BOUNDS,
+): number {
   let count = 0;
   if (filters.query.trim()) count += 1;
-  if (filters.bpmMin > BPM_BOUNDS.min || filters.bpmMax < BPM_BOUNDS.max) count += 1;
+  if (isBpmFilterActive(filters, bounds)) count += 1;
   if (filters.keys.length) count += 1;
   if (filters.moods.length) count += 1;
   if (filters.energies.length) count += 1;
@@ -180,6 +212,7 @@ export function matchesStudioFilters(
   track: StudioTrack,
   filters: StudioFilters,
   seed: StudioTrack | null,
+  bounds: BpmBounds = BPM_BOUNDS,
 ): boolean {
   const query = filters.query.trim().toLowerCase();
   if (query) {
@@ -189,7 +222,7 @@ export function matchesStudioFilters(
   }
   if (track.bpm != null) {
     if (track.bpm < filters.bpmMin || track.bpm > filters.bpmMax) return false;
-  } else if (filters.bpmMin > BPM_BOUNDS.min || filters.bpmMax < BPM_BOUNDS.max) {
+  } else if (isBpmFilterActive(filters, bounds)) {
     return false;
   }
   if (filters.keys.length && (!track.key || !filters.keys.includes(track.key))) return false;

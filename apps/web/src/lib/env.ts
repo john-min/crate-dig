@@ -1,13 +1,23 @@
-export type PublicAppMode = "mock" | "local" | "cloud";
+export type PublicAppMode = "mock" | "local" | "cloud" | "preview";
 
 export function getPublicAppMode(): PublicAppMode | undefined {
   const value = process.env.NEXT_PUBLIC_APP_MODE;
-  if (value === "mock" || value === "local" || value === "cloud") return value;
+  if (value === "mock" || value === "local" || value === "cloud" || value === "preview") {
+    return value;
+  }
   return undefined;
 }
 
 export function isCloudAppMode(): boolean {
   return getPublicAppMode() === "cloud";
+}
+
+export function isPreviewAppMode(): boolean {
+  return getPublicAppMode() === "preview";
+}
+
+export function isAuthGatedAppMode(): boolean {
+  return isCloudAppMode();
 }
 
 export function getSupabasePublishableEnv(): { url: string; key: string } | null {
