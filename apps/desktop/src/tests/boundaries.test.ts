@@ -54,5 +54,8 @@ describe("process boundary scan", () => {
     expect(readFileSync(join(root, "main", "index.ts"), "utf8")).toContain(
       'preload: path.join(__dirname, "preload.js")',
     );
+    expect(readFileSync(join(root, "renderer", "adapter", "desktop-adapter.ts"), "utf8")).toContain(
+      "fetch.bind(globalThis)",
+    );
   });
 });
