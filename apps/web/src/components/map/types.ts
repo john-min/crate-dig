@@ -21,7 +21,7 @@ export type MapCanvasProps = {
   scores?: Record<string, number>;
   onFiltersChange?: (filters: MapFilters) => void;
   onSelectTrack?: (trackId: string | null) => void;
-  onHoverTrack?: (track: MapTrack | null) => void;
+  onHoverTrack?: (track: MapTrack | null, point?: { x: number; y: number }) => void;
   onColorBy?: (value: ColorBy) => void;
   onWebgl?: (ok: boolean) => void;
   fitRequestKey?: number;

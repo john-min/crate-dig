@@ -13,6 +13,7 @@
     "test:visual:update": "playwright test --update-snapshots"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^4.0.37",
     "@crate-dig/app-core": "workspace:^",
     "@crate-dig/contracts": "workspace:^",
     "@deck.gl/core": "^9.3.10",
@@ -20,11 +21,13 @@
     "@deck.gl/react": "^9.3.10",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
+    "ai": "^7.0.90",
     "deck.gl": "^9.3.10",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

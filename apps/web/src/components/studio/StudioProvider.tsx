@@ -26,6 +26,9 @@ import type {
   ProjectionCapability,
 } from "@crate-dig/contracts";
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
+import { clampQScore, pickQCandidates } from "@/lib/q/candidates";
+import { requestQ } from "@/lib/q/client";
+import type { QFilterPatch, QHistoryMessage, QProvider } from "@/lib/q/types";
 import { CRATE_COLORS, emptyFilters, EMPTY_FILTERS, MODEL_VERSION, MOOD_COLORS } from "@/lib/studio/constants";
 import { interpretQPrompt } from "@/lib/studio/q-intent";
 import type {
@@ -77,6 +80,10 @@ type StudioContextValue = {
   play: (id?: string) => void;
   pause: () => void;
   togglePlay: () => void;
+  playPrevious: () => void;
+  playNext: () => void;
+  canPlayPrevious: boolean;
+  canPlayNext: boolean;
   seek: (sec: number) => void;
   drawerOpen: boolean;
   openDrawer: (id: string) => void;
@@ -87,7 +94,10 @@ type StudioContextValue = {
   qCards: QCard[];
   qPrompt: string;
   qAsk: string;
+  qAnswer: string;
   qEvidence: string[];
+  qProvider: QProvider | null;
+  qSuggestedPrompts: string[];
   setQPrompt: (value: string) => void;
   openQ: () => void;
   openCrate: (id?: string) => void;
@@ -138,6 +148,31 @@ type StudioContextValue = {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
+function isFilterDriven(patch: QFilterPatch | Partial<StudioFilters>): boolean {
+  return Boolean(
+    patch.bpmMin != null ||
+      patch.bpmMax != null ||
+      (patch.keys && patch.keys.length) ||
+      (patch.moods && patch.moods.length) ||
+      (patch.textures && patch.textures.length) ||
+      (patch.energies && patch.energies.length) ||
+      ("genres" in patch && Array.isArray(patch.genres) && patch.genres.length > 0),
+  );
+}
+
+const RESTART_TRACK_SEC = 3;
+
+function queueForPlayback(
+  currentId: string | null,
+  candidates: StudioTrack[],
+  visible: StudioTrack[],
+  tracks: StudioTrack[],
+): StudioTrack[] {
+  if (currentId && candidates.some((track) => track.id === currentId)) return candidates;
+  if (currentId && visible.some((track) => track.id === currentId)) return visible;
+  return tracks;
+}
+
 export interface StudioProviderProps {
   adapter: CrateDigAdapter;
   children: ReactNode;
@@ -178,7 +213,10 @@ export function StudioProvider({
   const [qCards, setQCards] = useState<QCard[]>([]);
   const [qPrompt, setQPrompt] = useState("");
   const [qAsk, setQAsk] = useState("");
+  const [qAnswer, setQAnswer] = useState("");
   const [qEvidence, setQEvidence] = useState<string[]>([]);
+  const [qProvider, setQProvider] = useState<QProvider | null>(null);
+  const [qSuggestedPrompts, setQSuggestedPrompts] = useState<string[]>([]);
   const [qFocusIds, setQFocusIds] = useState<string[] | null>(null);
   const [listHeight, setListHeight] = useState(236);
   const [crates, setCrates] = useState(initialCrates);
@@ -195,7 +233,10 @@ export function StudioProvider({
   const playTimer = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingIdRef = useRef<string | null>(null);
+  const skipHandlers = useRef({ previous: () => {}, next: () => {} });
   const filtersRef = useRef(filters);
+  const qGeneration = useRef(0);
+  const qHistoryRef = useRef<QHistoryMessage[]>([]);
 
   const [cratesReady, setCratesReady] = useState(!sessionOnly);
 
@@ -269,14 +310,24 @@ export function StudioProvider({
     const el = new Audio();
     el.preload = "metadata";
     audioRef.current = el;
-    const onTime = () => setPlayheadSec(el.currentTime || 0);
+    const onTime = () => {
+      setPlayheadSec(el.currentTime || 0);
+      const duration = el.duration;
+      const id = playingIdRef.current;
+      if (!id || !Number.isFinite(duration) || duration <= 0) return;
+      setAllTracks((prev) =>
+        prev.map((track) =>
+          track.id === id && !(track.durationSec > 1) ? { ...track, durationSec: duration } : track,
+        ),
+      );
+    };
     const onPlaying = () => setPlayStatus("playing");
     const onPause = () => {
       if (!el.ended) setPlayStatus("paused");
     };
     const onEnded = () => {
-      setPlayStatus("paused");
       setPlayheadSec(el.duration || 0);
+      skipHandlers.current.next();
     };
     const onWait = () => setPlayStatus("buffering");
     const onError = () => {
@@ -479,6 +530,7 @@ export function StudioProvider({
         el && playingId === track.id && playStatus === "paused" && el.src,
       );
       if (!resume) {
+        playingIdRef.current = track.id;
         setPlayingId(track.id);
         setPlayheadSec(0);
         if (el) {
@@ -506,7 +558,7 @@ export function StudioProvider({
             setPlayheadSec((sec) => {
               if (sec + 0.25 >= track.durationSec) {
                 stopTimer();
-                setPlayStatus("paused");
+                window.queueMicrotask(() => skipHandlers.current.next());
                 return track.durationSec;
               }
               return sec + 0.25;
@@ -526,7 +578,10 @@ export function StudioProvider({
           el.src = url;
         }
         void el.play().then(
-          () => announce(`Playing ${track.title}`),
+          () => {
+            setPlayStatus("playing");
+            announce(`Playing ${track.title}`);
+          },
           () => {
             setPlayStatus("failed");
             announce(`Could not play ${track.title}.`);
@@ -585,11 +640,56 @@ export function StudioProvider({
     else play();
   }, [pause, play, playStatus]);
 
+  useEffect(() => {
+    if (playStatus !== "playing" && playStatus !== "buffering") return;
+    const el = audioRef.current;
+    if (!el) return;
+    let frame = 0;
+    const tick = () => {
+      if (Number.isFinite(el.currentTime)) setPlayheadSec(el.currentTime);
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [playStatus]);
+
+  const currentPlaybackId = playingId ?? selectedIds[0] ?? null;
+  const playbackQueue = useMemo(
+    () => queueForPlayback(currentPlaybackId, candidates, visible, tracks),
+    [candidates, currentPlaybackId, tracks, visible],
+  );
+  const playbackIndex = useMemo(() => {
+    if (!currentPlaybackId) return -1;
+    return playbackQueue.findIndex((track) => track.id === currentPlaybackId);
+  }, [currentPlaybackId, playbackQueue]);
+  const canPlayPrevious = Boolean(currentPlaybackId) && (playheadSec > RESTART_TRACK_SEC || playbackIndex > 0);
+  const canPlayNext = playbackIndex >= 0 && playbackIndex < playbackQueue.length - 1;
+
   const seek = useCallback((sec: number) => {
     const next = Math.max(0, sec);
     setPlayheadSec(next);
     if (audioRef.current && audioRef.current.src) audioRef.current.currentTime = next;
   }, []);
+
+  const playPrevious = useCallback(() => {
+    if (playheadSec > RESTART_TRACK_SEC) {
+      seek(0);
+      return;
+    }
+    const previous = playbackIndex > 0 ? playbackQueue[playbackIndex - 1] : null;
+    if (previous) play(previous.id);
+  }, [play, playbackIndex, playbackQueue, playheadSec, seek]);
+
+  const playNext = useCallback(() => {
+    const next = playbackIndex >= 0 ? playbackQueue[playbackIndex + 1] : null;
+    if (next) {
+      play(next.id);
+      return;
+    }
+    setPlayStatus("paused");
+  }, [play, playbackIndex, playbackQueue]);
+
+  skipHandlers.current = { previous: playPrevious, next: playNext };
 
   const buildQCards = useCallback(
     (from: StudioTrack, pool: StudioTrack[], ranking: readonly Neighbor[]): QCard[] => {
@@ -640,6 +740,15 @@ export function StudioProvider({
     }));
   }, []);
 
+  const colorizeQCards = useCallback(
+    (cards: QCard[]): QCard[] =>
+      cards.map((card) => {
+        const track = tracks.find((item) => item.id === card.trackId);
+        return { ...card, color: MOOD_COLORS[track?.mood ?? ""] ?? "#8B7BF0" };
+      }),
+    [tracks],
+  );
+
   const askQ = useCallback(
     (prompt?: string) => {
       const text = (prompt ?? qPrompt).trim();
@@ -648,31 +757,62 @@ export function StudioProvider({
       setQAsk(text);
       setQPrompt("");
       setQPhase("listening");
+      setQAnswer("");
       announce("Q is listening for nearby records");
-      window.setTimeout(() => {
-        if (/fail|offline/i.test(text)) {
-          setQPhase("failure");
-          setQCards([]);
-          announce("Q couldn’t finish that search. Your library and crate are unchanged.");
-          return;
+
+      if (/fail|offline/i.test(text)) {
+        setQPhase("failure");
+        setQCards([]);
+        setQProvider(null);
+        announce("Q couldn’t finish that search. Your library and crate are unchanged.");
+        return;
+      }
+
+      const generation = ++qGeneration.current;
+      const history = qHistoryRef.current.slice(-6);
+      const anchorId = seed?.id ?? primarySelected?.id ?? null;
+
+      void (async () => {
+      let scores = neighborScores;
+      if (anchorId) {
+        try {
+          const items = await requestNeighbors(anchorId);
+          if (generation !== qGeneration.current) return;
+          scores = new Map(
+            items
+              .filter((item) => item.evidence?.nonSonic !== true)
+              .map((item) => [item.trackId, item.score]),
+          );
+        } catch {
+          /* keep cached scores */
         }
+      }
+      const scoreForAsk = (track: (typeof tracks)[number]) => scores.get(track.id) ?? null;
+      const qPool = pickQCandidates(tracks, {
+        prompt: text,
+        visibleIds: visible.map((track) => track.id),
+        selectedIds,
+        seedId: anchorId,
+        scoreFor: scoreForAsk,
+      });
+
+      const applyLocal = () => {
+        if (generation !== qGeneration.current) return;
         const { filters: patch, evidence } = interpretQPrompt(text, bpmBounds);
-        const nextFilters = { ...filtersRef.current, ...patch, query: "" };
-        const pool = tracks.filter((track) => matchesStudioFilters(track, nextFilters, seed, bpmBounds));
-        const from = primarySelected ?? seed ?? pool[0];
-        const filterDriven = Boolean(
-          patch.bpmMin != null ||
-            patch.bpmMax != null ||
-            (patch.moods && patch.moods.length) ||
-            (patch.keys && patch.keys.length) ||
-            (patch.textures && patch.textures.length) ||
-            (patch.energies && patch.energies.length),
+        const nextFilters = { ...filtersRef.current, ...patch, query: "", bpmNearSeed: false };
+        const filtered = tracks.filter((track) =>
+          matchesStudioFilters(track, nextFilters, seed, bpmBounds),
         );
+        const from = primarySelected ?? seed ?? filtered[0];
         const finish = (cards: QCard[]) => {
+          if (generation !== qGeneration.current) return;
           setFilters(nextFilters);
           setQEvidence(evidence);
           setQCards(cards);
-          setQFocusIds(filterDriven ? null : cards.map((card) => card.trackId));
+          setQAnswer("");
+          setQProvider("local");
+          setQSuggestedPrompts([]);
+          setQFocusIds(isFilterDriven(patch) ? null : cards.map((card) => card.trackId));
           setQPhase(cards.length ? "found" : "empty");
           announce(
             cards.length
@@ -683,29 +823,134 @@ export function StudioProvider({
         if (analysisReady && from) {
           void requestNeighbors(from.id)
             .then((items) => {
-              const ranked = buildQCards(from, pool, items).map((card) => {
-                const track = tracks.find((item) => item.id === card.trackId);
-                return { ...card, color: MOOD_COLORS[track?.mood ?? ""] ?? "#8B7BF0" };
-              });
-              finish(ranked.length ? ranked : cardsFromTracks(pool.filter((track) => track.id !== from.id)));
+              const ranked = colorizeQCards(buildQCards(from, filtered, items));
+              finish(
+                ranked.length
+                  ? ranked
+                  : cardsFromTracks(filtered.filter((track) => track.id !== from.id)),
+              );
             })
-            .catch(() => finish(cardsFromTracks(pool)));
+            .catch(() => finish(cardsFromTracks(filtered)));
           return;
         }
-        finish(cardsFromTracks(pool));
-      }, 700);
+        finish(cardsFromTracks(filtered));
+      };
+
+      if (!qPool.length) {
+        applyLocal();
+        return;
+      }
+
+      void requestQ({
+        prompt: text,
+        history,
+        context: {
+          libraryName,
+          librarySource,
+          analysisReady,
+          seedTrackId: seed?.id ?? null,
+          selectedTrackIds: selectedIds.slice(0, 40),
+          bpmBounds,
+          activeCrate: activeCrate
+            ? {
+                id: activeCrate.id,
+                name: activeCrate.name,
+                trackCount: activeCrate.trackIds.length,
+                intention: activeCrate.intention,
+                room: activeCrate.room,
+                timeOfDay: activeCrate.timeOfDay,
+              }
+            : null,
+        },
+        candidates: qPool.map((track) => ({
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          bpm: track.bpm,
+          key: track.key,
+          genre: track.genre,
+          mood: track.mood,
+          energy: track.energy,
+          textures: track.textures,
+          clusterName: track.clusterName,
+          suggestedMoment: track.suggestedMoment,
+          score: clampQScore(scoreForAsk(track)),
+        })),
+      })
+        .then((response) => {
+          if (generation !== qGeneration.current) return;
+          const patch = response.filters;
+          const nextFilters = { ...filtersRef.current, ...patch, query: "", bpmNearSeed: false };
+          const filtered = tracks.filter((track) =>
+            matchesStudioFilters(track, nextFilters, seed, bpmBounds),
+          );
+          const from = primarySelected ?? seed ?? filtered[0];
+          const apiCards = colorizeQCards(
+            response.cards.filter((card) => tracks.some((track) => track.id === card.trackId)),
+          );
+          const finish = (cards: QCard[]) => {
+            if (generation !== qGeneration.current) return;
+            setFilters(nextFilters);
+            setQEvidence(response.evidence);
+            setQCards(cards);
+            setQAnswer(response.answer);
+            setQProvider(response.provider);
+            setQSuggestedPrompts(response.suggestedPrompts);
+            setQFocusIds(isFilterDriven(patch) ? null : cards.map((card) => card.trackId));
+            setQPhase(cards.length ? "found" : "empty");
+            qHistoryRef.current = [
+              ...qHistoryRef.current,
+              { role: "user" as const, text },
+              { role: "assistant" as const, text: response.answer },
+            ].slice(-6);
+            announce(
+              cards.length
+                ? `Q found ${cards.length} nearby records.`
+                : "Q didn’t find a confident match.",
+            );
+          };
+          if (apiCards.length) {
+            finish(apiCards);
+            return;
+          }
+          if (analysisReady && from) {
+            void requestNeighbors(from.id)
+              .then((items) => {
+                const ranked = colorizeQCards(buildQCards(from, filtered, items));
+                finish(
+                  ranked.length
+                    ? ranked
+                    : cardsFromTracks(filtered.filter((track) => track.id !== from.id)),
+                );
+              })
+              .catch(() => finish(cardsFromTracks(filtered)));
+            return;
+          }
+          finish(cardsFromTracks(filtered));
+        })
+        .catch(() => {
+          applyLocal();
+        });
+      })();
     },
     [
+      activeCrate,
       analysisReady,
       announce,
       bpmBounds,
       buildQCards,
       cardsFromTracks,
+      colorizeQCards,
+      libraryName,
+      librarySource,
+      neighborScores,
       primarySelected,
       qPrompt,
       requestNeighbors,
       seed,
+      selectedIds,
       tracks,
+      visible,
     ],
   );
 
@@ -870,6 +1115,10 @@ export function StudioProvider({
     play,
     pause,
     togglePlay,
+    playPrevious,
+    playNext,
+    canPlayPrevious,
+    canPlayNext,
     seek,
     drawerOpen,
     openDrawer,
@@ -880,7 +1129,10 @@ export function StudioProvider({
     qCards,
     qPrompt,
     qAsk,
+    qAnswer,
     qEvidence,
+    qProvider,
+    qSuggestedPrompts,
     setQPrompt,
     openQ,
     openCrate,

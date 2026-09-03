@@ -1,3 +1,19 @@
+export function IconSkipBack({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path fill="currentColor" d="M4.2 5.5h1.7v13H4.2zm9.3 0v13L7.1 12zm7.35 0v13L14.5 12z" />
+    </svg>
+  );
+}
+
+export function IconSkipForward({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path fill="currentColor" d="M18.1 5.5h1.7v13h-1.7zM3.15 5.5v13L9.55 12zm7.35 0v13L16.9 12z" />
+    </svg>
+  );
+}
+
 export function IconPlay({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 16 16" aria-hidden>

@@ -23,6 +23,12 @@ export function normalizeCamelotKey(value: string): string {
   return `${Number(match[1])}${match[2]}`;
 }
 
+export function normalizeGenre(value: string): string {
+  const genre = value.trim();
+  if (/^nu[\s-]*disco$/i.test(genre)) return "Nu Disco";
+  return genre;
+}
+
 export function moodFromGenre(genre: string): Mood {
   const value = genre.toLowerCase();
   if (/techno|industrial|hypnotic|acid/.test(value)) return "dark";
@@ -70,7 +76,7 @@ export type PreviewStudioFields = {
 };
 
 export function studioFieldsFromPreviewTags(tags: PreviewTagRecord): PreviewStudioFields {
-  const genre = tags.genre?.trim() ?? "";
+  const genre = normalizeGenre(tags.genre ?? "");
   const key = tags.key ? normalizeCamelotKey(tags.key) : null;
   const energy = energyFromLevel(tags.energyLevel);
   const mood = genre ? moodFromGenre(genre) : "warm";

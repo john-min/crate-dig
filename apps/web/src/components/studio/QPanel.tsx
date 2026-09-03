@@ -60,6 +60,11 @@ export function QPanel({ overlay = false }: { overlay?: boolean }) {
             className="flex-1 bg-transparent text-[12.5px] text-[#EDEFF3] outline-none placeholder:text-[#8B929F]"
           />
         </label>
+        {s.qProvider ? (
+          <p className="mt-2 px-0.5 text-[10.5px] text-[#6B7383]">
+            {s.qProvider === "groq" ? "Qwen on Groq" : "Local matching"}
+          </p>
+        ) : null}
       </div>
     </aside>
   );
@@ -125,6 +130,9 @@ function QBody() {
         <p className="mb-1 text-[11px] text-[#6B7383]">
           listening → found {s.qCards.length} records → applied to view
         </p>
+        {s.qAnswer ? (
+          <p className="mb-2 text-[13px] leading-[1.6] text-[#EDEFF3]">{s.qAnswer}</p>
+        ) : null}
         <p className="mb-3 text-[13px] leading-[1.6] text-[#B7BEC9]">“{s.qAsk}”</p>
         <div className="mb-3.5 flex flex-wrap gap-1.5">
           {s.qEvidence.map((chip) => (
@@ -161,6 +169,9 @@ function QBody() {
                     <div className="mt-0.5 text-[11px] text-[#8B929F]">
                       {card.artist} · {formatBpm(card.bpm)} · {formatKey(card.key)}
                     </div>
+                    {card.reason ? (
+                      <p className="mt-1 text-[11px] leading-[1.45] text-[#8B929F]">{card.reason}</p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-2 flex gap-3 pl-[35px]">

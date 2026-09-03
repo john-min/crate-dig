@@ -3,6 +3,7 @@ import {
   energyFromLevel,
   moodFromGenre,
   normalizeCamelotKey,
+  normalizeGenre,
   previewCatalogTrackFromTags,
   studioFieldsFromPreviewTags,
 } from "./studio-from-tags";
@@ -29,6 +30,12 @@ describe("studioFieldsFromPreviewTags", () => {
       analysisStatus: "ok",
     });
     expect(studio.tags[0]).toBe("Progressive House");
+  });
+
+  it("merges Nu-Disco spellings into Nu Disco", () => {
+    expect(normalizeGenre("Nu-Disco")).toBe("Nu Disco");
+    expect(normalizeGenre("nu disco")).toBe("Nu Disco");
+    expect(studioFieldsFromPreviewTags({ genre: "Nu-Disco" }).genre).toBe("Nu Disco");
   });
 
   it("attaches ID3 studio fields onto a catalog entry", () => {

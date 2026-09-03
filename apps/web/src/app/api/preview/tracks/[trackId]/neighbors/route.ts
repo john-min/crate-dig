@@ -1,6 +1,6 @@
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL } from "@crate-dig/contracts";
-import { requireApiAccess } from "@/lib/cloud/access";
 import { jsonError, notFound } from "@/lib/cloud/http";
+import { isDemoPreviewApiEnabled } from "@/lib/preview/access";
 import { listSonicNeighbors } from "@/lib/similarity/list-neighbors";
 
 export const runtime = "nodejs";
@@ -9,8 +9,9 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ trackId: string }> },
 ) {
-  const gate = await requireApiAccess();
-  if (!gate.ok) return gate.response;
+  if (!isDemoPreviewApiEnabled()) {
+    return notFound("Preview neighbors are not available in local mode.");
+  }
   const { trackId } = await context.params;
   if (!trackId) return notFound("That track was not found.");
   const url = new URL(request.url);
@@ -20,7 +21,7 @@ export async function GET(
     const { neighbors, source } = await listSonicNeighbors(trackId, {
       limit: Number.isFinite(limit) ? limit : 80,
       channel,
-      prefer: "supabase",
+      prefer: "sqlite",
     });
     return Response.json({ neighbors, channel, source });
   } catch (error) {

@@ -49,6 +49,19 @@ Values can be copied from the repo-root `.env.example`. The publishable key is t
 
 Prototype access: set `ACCESS_CODE` in `.env.local` and on Vercel (example value `THONGLOR`). Do not put it in `NEXT_PUBLIC_*`. Existing `validate_access_code` / `redeem_access_code` RPCs remain unused for this gate.
 
+## Q (Groq / Qwen)
+
+Q maps a natural-language ask onto library filters and a short list of candidate IDs. It must not invent BPM, keys, or sonic evidence.
+
+1. Create an API key at [console.groq.com](https://console.groq.com).
+2. Set these on Vercel **Production and Preview**, and in `.env.local`:
+   - `GROQ_API_KEY` (server only; never `NEXT_PUBLIC_`)
+   - `Q_PROVIDER=groq` (optional; a key alone enables Groq)
+   - `GROQ_MODEL=qwen/qwen3.6-27b` (optional default)
+3. Redeploy after adding env vars. `/map` is ungated and uses the same route.
+
+Without a key, or with `Q_PROVIDER=local`, Q stays on deterministic local matching. Groq failures fall back to that same local path.
+
 ## Preview playback (R2, no auth)
 
 Vercel **Preview** (`web-dev`) and `/map` load the shared `source='demo'` library from

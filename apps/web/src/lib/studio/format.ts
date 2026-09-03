@@ -29,6 +29,23 @@ export function formatKey(key: string | null | undefined): string {
   return key && key.trim() ? key : "—";
 }
 
+export function formatGenre(genre: string | null | undefined): string {
+  return genre?.trim() || "—";
+}
+
+export function uniqueGenres(tracks: readonly { genre: string }[], limit?: number): string[] {
+  const counts = new Map<string, number>();
+  for (const track of tracks) {
+    const genre = track.genre.trim();
+    if (!genre) continue;
+    counts.set(genre, (counts.get(genre) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((left, right) =>
+    left[0].localeCompare(right[0], undefined, { sensitivity: "base" }),
+  );
+  return (limit != null ? ranked.slice(0, limit) : ranked).map(([genre]) => genre);
+}
+
 export function formatDuration(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec) || sec < 0) return "—";
   const m = Math.floor(sec / 60);

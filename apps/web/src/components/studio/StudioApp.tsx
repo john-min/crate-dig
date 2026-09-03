@@ -42,25 +42,8 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
     if (sidecarOpen && s.drawerOpen) s.closeDrawer();
   }, [exclusive, sidecarOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const drag = useRef(false);
-  const onListDrag = (event: React.PointerEvent) => {
-    drag.current = true;
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
   return (
-    <div
-      className="relative grid h-dvh grid-rows-[56px_minmax(0,1fr)_78px] overflow-hidden bg-[#0A0B0D] text-[#EDEFF3]"
-      onPointerMove={(event) => {
-        if (!drag.current) return;
-        const frame = event.currentTarget.getBoundingClientRect();
-        const fromBottom = frame.bottom - 78 - event.clientY;
-        s.setListHeight(Math.min(Math.max(fromBottom, 140), Math.round(frame.height * 0.62)));
-      }}
-      onPointerUp={() => {
-        drag.current = false;
-      }}
-    >
+    <div className="relative grid h-dvh grid-rows-[56px_minmax(0,1fr)_78px] overflow-hidden bg-[#0A0B0D] text-[#EDEFF3]">
       <StudioShortcuts />
       <StudioTopBar signedIn={signedIn} compact={sheetFilters} />
       <div className="grid min-h-0" style={{ gridTemplateColumns: bodyColumns }}>
@@ -84,11 +67,13 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
           ) : (
             <div
               className="grid min-h-0 flex-1"
+              data-studio-split
               style={{ gridTemplateRows: `auto minmax(0, 1fr) ${s.listHeight}px` }}
             >
               <MapTrustBar />
               <StudioMap />
-              <div className="flex min-h-0 flex-col border-t border-[#1B1F27] bg-[#0D0F13]">
+              <div className="relative flex min-h-0 flex-col border-t border-[#1B1F27] bg-[#0D0F13]">
+                <ListResizeHandle height={s.listHeight} onChange={s.setListHeight} />
                 <div className="flex h-[38px] shrink-0 items-center gap-3.5 border-b border-[#171B21] px-4">
                   <span className="text-[12.5px] font-semibold">
                     {s.qStatus === "found" && s.qAsk ? "Applied from Q" : "Records in view"}
@@ -96,14 +81,6 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
                   <span className="text-[11.5px] text-[#7C8698]">
                     {s.candidates.length.toLocaleString()} tracks
                   </span>
-                  <div
-                    role="separator"
-                    aria-orientation="horizontal"
-                    aria-label="Resize records list"
-                    title="Drag to resize"
-                    className="ml-auto h-1.5 w-1.5 cursor-row-resize rounded-[1px] bg-[#2E3440]"
-                    onPointerDown={onListDrag}
-                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <CandidateList embedded />
@@ -140,6 +117,54 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
       {s.drawerOpen && drawerSheet ? <TrackDrawer asSheet /> : null}
       {s.advancedOpen && sheetFilters ? <FilterSheet signedIn={signedIn} /> : null}
       <AudioPlayer />
+    </div>
+  );
+}
+
+function ListResizeHandle({
+  height,
+  onChange,
+}: {
+  height: number;
+  onChange: (value: number) => void;
+}) {
+  const drag = useRef<{ y: number; h: number } | null>(null);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { y: event.clientY, h: height };
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    const split = event.currentTarget.closest("[data-studio-split]");
+    const max = split ? Math.round(split.getBoundingClientRect().height * 0.82) : 720;
+    const next = drag.current.h + (drag.current.y - event.clientY);
+    onChange(Math.min(Math.max(Math.round(next), 52), max));
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize records list"
+      aria-valuenow={Math.round(height)}
+      title="Drag to resize"
+      className="absolute -top-1.5 left-0 right-0 z-20 flex h-[44px] cursor-row-resize touch-none items-start justify-center pt-0.5"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
+      <span className="h-1 w-10 rounded-full bg-[#5B6373]" />
     </div>
   );
 }

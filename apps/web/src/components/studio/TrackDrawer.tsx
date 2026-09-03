@@ -45,7 +45,7 @@ export function TrackDrawer({ asSheet = false }: { asSheet?: boolean }) {
       <div className="flex items-start justify-between gap-3 px-4 pt-4">
         <div className="min-w-0">
           <p className="text-[12px] text-muted">
-            {track.label} · {track.year} · {track.genre || "—"}
+            {track.label} · {track.year} · {track.genre || "—"} · {track.mood}
           </p>
           <h2 id={headingId} className="mt-1 font-serif text-[1.75rem] leading-tight tracking-tight">
             {track.title}
@@ -64,9 +64,11 @@ export function TrackDrawer({ asSheet = false }: { asSheet?: boolean }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        <dl className="mt-4 grid grid-cols-5 gap-2 text-[12px]">
+        <dl className="mt-4 grid grid-cols-4 gap-2 text-[12px]">
           <Stat label="BPM" value={formatBpm(track.bpm)} />
           <Stat label="Key" value={formatKey(track.key)} />
+          <Stat label="Genre" value={track.genre.trim() || "—"} />
+          <Stat label="Vibe" value={track.mood} />
           <Stat label="Length" value={formatDuration(track.durationSec)} />
           <Stat
             label="Energy"
