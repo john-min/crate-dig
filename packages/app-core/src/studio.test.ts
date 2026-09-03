@@ -55,6 +55,7 @@ const emptyFilters: StudioFilters = {
   moods: [],
   energies: [],
   textures: [],
+  genres: [],
   compatibleKeys: false,
   bpmNearSeed: false,
 };
@@ -169,6 +170,16 @@ describe("studio filters", () => {
     expect(
       matchesStudioFilters(trackRow, { ...emptyFilters, bpmMin: 128, bpmMax: 132 }, null),
     ).toBe(false);
+    expect(
+      matchesStudioFilters(trackRow, { ...emptyFilters, genres: ["UK Garage"] }, null),
+    ).toBe(false);
+    expect(
+      matchesStudioFilters(
+        studio({ ...trackRow, id: "g", genre: "UK Garage" }),
+        { ...emptyFilters, genres: ["uk garage"] },
+        null,
+      ),
+    ).toBe(true);
   });
 
   it("does not treat the library BPM span as an active filter", () => {

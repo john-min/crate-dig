@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { MapCanvas } from "@/components/map/MapCanvas";
+import { formatBpm, formatGenre, formatKey } from "@/lib/studio/format";
+import type { MapTrack } from "@/lib/types/track";
 import { MapLegend } from "./MapLegend";
 import { NoResults } from "./NoResults";
 import { MapFallbackList } from "./MapFallbackList";
@@ -33,6 +35,7 @@ export function StudioMap() {
   const s = useStudio();
   const { analysisReady, seed, visible, scoreFor } = s;
   const [fitRequestKey, setFitRequestKey] = useState(0);
+  const [hover, setHover] = useState<{ track: MapTrack; x: number; y: number } | null>(null);
   const visibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible]);
   const scores = useMemo(() => {
     if (!analysisReady) return {};
@@ -65,11 +68,43 @@ export function StudioMap() {
             if (id) s.selectTrack(id);
             else s.selectTrack(null);
           }}
+          onHoverTrack={(track, point) => {
+            if (!track || !point) {
+              setHover(null);
+              return;
+            }
+            setHover({ track, x: point.x, y: point.y });
+          }}
           onWebgl={s.setWebglOk}
         />
+        {hover ? <MapHoverCard hover={hover} /> : null}
         <MapLegend onFit={() => setFitRequestKey((key) => key + 1)} />
         {s.selectedIds.length > 0 ? <SelectionActions /> : null}
       </div>
+    </div>
+  );
+}
+
+function MapHoverCard({ hover }: { hover: { track: MapTrack; x: number; y: number } }) {
+  const genre = formatGenre(hover.track.genre);
+  const vibe = hover.track.mood?.trim() || "—";
+  return (
+    <div
+      className="pointer-events-none absolute z-20 w-56 rounded-[8px] border border-[#1B1F27] bg-[#0D0F13] px-2.5 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+      style={{
+        left: Math.max(8, hover.x + 14),
+        top: Math.max(8, hover.y - 12),
+      }}
+    >
+      <p className="truncate text-[13px] font-medium text-[#EDEFF3]">{hover.track.title}</p>
+      <p className="truncate text-[12px] text-[#A6ACB8]">{hover.track.artist}</p>
+      <p className="mt-1 text-[11.5px] text-[#7C8698]">
+        {formatBpm(hover.track.bpm ?? null)} · {formatKey(hover.track.key)}
+      </p>
+      <p className="mt-1 truncate text-[11.5px] text-[#A6ACB8]">
+        {genre}
+        <span className="ml-1.5 rounded-full bg-[#171B21] px-[7px] py-0.5 capitalize">{vibe}</span>
+      </p>
     </div>
   );
 }

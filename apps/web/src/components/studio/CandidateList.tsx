@@ -48,13 +48,14 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
       )}
       <div
         role="rowgroup"
-        className="sticky top-0 hidden h-7 shrink-0 items-center bg-[#0D0F13] px-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#5B6373] md:grid md:grid-cols-[28px_2.1fr_1.3fr_56px_44px_1fr_74px] md:gap-3"
+        className="sticky top-0 hidden h-7 shrink-0 items-center bg-[#0D0F13] px-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#5B6373] min-[900px]:grid min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_64px] min-[900px]:gap-2.5"
       >
         <span />
         <span>Title</span>
         <span>Artist</span>
         <span>BPM</span>
         <span>Key</span>
+        <span>Genre</span>
         <span>Vibe</span>
         <span />
       </div>
@@ -71,7 +72,7 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
                 track={track}
                 density={s.density}
                 selected={s.selectedIds.includes(track.id)}
-                playing={playingId === track.id && s.playStatus === "playing"}
+                playing={playingId === track.id && (s.playStatus === "playing" || s.playStatus === "buffering")}
                 focused={s.focusedId === track.id}
                 score={s.scoreFor(track)}
                 onSelect={(event) => {
@@ -80,7 +81,7 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
                   s.selectTrack(track.id, { additive, range });
                 }}
                 onPlay={() => {
-                  if (playingId === track.id && s.playStatus === "playing") s.pause();
+                  if (playingId === track.id && (s.playStatus === "playing" || s.playStatus === "buffering")) s.pause();
                   else s.play(track.id);
                 }}
                 onAdd={() => s.addToCrate(track.id)}

@@ -1,7 +1,7 @@
 "use client";
 
 import { TRACK_ROW_HEIGHT } from "@/lib/studio/constants";
-import { formatBpm, formatKey } from "@/lib/studio/format";
+import { formatBpm, formatGenre, formatKey } from "@/lib/studio/format";
 import type { StudioTrack } from "@/lib/studio/types";
 import { IconPause, IconPlay } from "./icons";
 
@@ -47,7 +47,8 @@ export function TrackRow({
 }: Props) {
   const pending = track.analysisStatus === "pending";
   const failed = track.analysisStatus === "failed";
-  const vibe = pending ? "needs analysis" : track.tags[0] ?? track.mood;
+  const genre = formatGenre(track.genre);
+  const vibe = pending ? "needs analysis" : track.mood;
   const status = statusLabel(track);
   const titleColor = failed ? "#E4705A" : selected ? "#FFFFFF" : "#EDEFF3";
   const height = TRACK_ROW_HEIGHT[density];
@@ -71,7 +72,7 @@ export function TrackRow({
           onSelect(event);
         }
       }}
-      className="grid h-[var(--track-row-height)] grid-cols-[28px_minmax(0,1fr)_56px_44px] items-center gap-3 overflow-hidden border-b border-[#14171C] px-4 text-left md:grid-cols-[28px_2.1fr_1.3fr_56px_44px_1fr_74px]"
+      className="grid h-[var(--track-row-height)] grid-cols-[28px_minmax(0,1fr)_56px_44px] items-center gap-3 overflow-hidden border-b border-[#14171C] px-4 text-left min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_64px] min-[900px]:gap-2.5"
       style={{
         background: selected || focused ? "#111318" : "transparent",
         ["--track-row-height" as string]: `${height}px`,
@@ -98,22 +99,23 @@ export function TrackRow({
           <p className="truncate text-[12.8px] leading-4" style={{ color: titleColor }}>
             {track.title}
           </p>
-          <p className="truncate text-[11px] leading-3.5 text-[#8B929F] md:hidden">
-            {status ?? track.artist}
+          <p className="truncate text-[11px] leading-3.5 text-[#8B929F] min-[900px]:hidden">
+            {status ?? `${track.artist} · ${genre} · ${vibe}`}
           </p>
         </div>
       </div>
-      <p className="hidden truncate text-[12.3px] text-[#A6ACB8] md:block">{track.artist}</p>
+      <p className="hidden truncate text-[12.3px] text-[#A6ACB8] min-[900px]:block">{track.artist}</p>
       <p className="tabular text-[12px]" style={{ color: track.bpm != null ? "#A6ACB8" : "#5B6373" }}>
         {formatBpm(track.bpm)}
       </p>
       <p className="tabular text-[12px] text-[#8B7BF0]">{formatKey(track.key)}</p>
-      <div className="hidden min-w-0 items-center md:flex">
-        <span className="max-w-full truncate rounded-full bg-[#171B21] px-[7px] py-0.5 text-[10.5px] text-[#A6ACB8]">
+      <p className="hidden truncate text-[12.3px] text-[#A6ACB8] min-[900px]:block">{genre}</p>
+      <div className="hidden min-w-0 items-center min-[900px]:flex">
+        <span className="max-w-full truncate rounded-full bg-[#171B21] px-[7px] py-0.5 text-[10.5px] capitalize text-[#A6ACB8]">
           {status ?? vibe}
         </span>
       </div>
-      <div className="hidden text-right text-[11.5px] text-[#98A0AE] md:block" onClick={(e) => e.stopPropagation()}>
+      <div className="hidden text-right text-[11.5px] text-[#98A0AE] min-[900px]:block" onClick={(e) => e.stopPropagation()}>
         <button type="button" aria-label={`Add ${track.title} to crate`} onClick={onAdd}>
           + Crate
         </button>

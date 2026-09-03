@@ -94,6 +94,7 @@ export function emptyFilters(bounds: { min: number; max: number } = BPM_BOUNDS) 
     moods: [] as Mood[],
     energies: [] as Energy[],
     textures: [] as Texture[],
+    genres: [] as string[],
     compatibleKeys: false,
     bpmNearSeed: false,
   };

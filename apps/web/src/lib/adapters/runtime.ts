@@ -37,6 +37,7 @@ export function createWebRuntime(
         adapter: new MockAdapter({
           playbackPath: "/api/preview/playback",
           catalogPath: "/api/preview/catalog",
+          neighborsPath: "/api/preview/tracks",
         }),
       };
     case "local":

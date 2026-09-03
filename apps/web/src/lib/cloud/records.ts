@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { hasPlayableAudioObject, pickPlaybackObjectKey } from "@/lib/cloud/playback-object";
 import { restrictDemoAudioObjects } from "@/lib/preview/r2-catalog";
 import { studioFieldsFromPreviewTags } from "@/lib/preview/studio-from-tags";
+import { applyGenreIslandProjection } from "@/lib/similarity/genre-projection";
 
 type TrackRow = {
   id: string;
@@ -213,12 +214,13 @@ export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<T
     .order("artist", { ascending: true })
     .order("title", { ascending: true });
   if (error) throw error;
-  return ((data ?? []) as TrackRow[]).map((row) =>
+  const tracks = ((data ?? []) as TrackRow[]).map((row) =>
     mapTrackRow({
       ...row,
       audio_objects: restrictDemoAudioObjects(row.audio_objects),
     }),
   );
+  return applyGenreIslandProjection(supabase, tracks);
 }
 
 export async function demoPlaybackObjectKey(

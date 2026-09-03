@@ -91,6 +91,7 @@ export class MockAdapter implements MockRuntimeAdapter {
   private studioTracks: readonly StudioTrack[];
   private readonly playbackPath?: string;
   private readonly catalogPath?: string;
+  private readonly neighborsPath?: string;
   private readonly requestFetch: typeof fetch;
   private catalogPromise: Promise<readonly Track[]> | null = null;
   private previewLibrary = {
@@ -100,7 +101,12 @@ export class MockAdapter implements MockRuntimeAdapter {
   };
 
   constructor(
-    options: { playbackPath?: string; catalogPath?: string; fetch?: typeof fetch } = {},
+    options: {
+      playbackPath?: string;
+      catalogPath?: string;
+      neighborsPath?: string;
+      fetch?: typeof fetch;
+    } = {},
   ) {
     this.fixtureTracks = getMockLibrary().tracks.map((track) =>
       toContractTrack(track as Omit<StudioTrack, "libraryId">),
@@ -108,6 +114,7 @@ export class MockAdapter implements MockRuntimeAdapter {
     this.studioTracks = this.fixtureTracks.map((track) => mapTrackToStudio(track));
     this.playbackPath = options.playbackPath;
     this.catalogPath = options.catalogPath;
+    this.neighborsPath = options.neighborsPath;
     this.requestFetch = options.fetch ?? ((input, init) => fetch(input, init));
   }
 
@@ -210,6 +217,22 @@ export class MockAdapter implements MockRuntimeAdapter {
     trackId: string,
     options: NeighborOptions = {},
   ): Promise<readonly Neighbor[]> {
+    if (this.neighborsPath) {
+      const query = new URLSearchParams();
+      query.set("channel", options.channel ?? "librosa-zscore-v1");
+      if (options.limit != null) query.set("limit", String(options.limit));
+      try {
+        const response = await this.requestFetch(
+          `${this.neighborsPath}/${encodeURIComponent(trackId)}/neighbors?${query}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) return [];
+        const body = (await response.json()) as { neighbors?: Neighbor[] };
+        return body.neighbors ?? [];
+      } catch {
+        return [];
+      }
+    }
     await this.tracksForMode();
     const seed = this.studioTracks.find((track) => track.id === trackId);
     if (!seed) return [];

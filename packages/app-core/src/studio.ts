@@ -43,6 +43,7 @@ export type StudioFilters = {
   moods: Mood[];
   energies: Energy[];
   textures: Texture[];
+  genres: string[];
   compatibleKeys: boolean;
   bpmNearSeed: boolean;
 };
@@ -187,6 +188,7 @@ export function activeFilterCount(
   if (filters.moods.length) count += 1;
   if (filters.energies.length) count += 1;
   if (filters.textures.length) count += 1;
+  if (filters.genres?.length) count += 1;
   if (filters.compatibleKeys) count += 1;
   if (filters.bpmNearSeed) count += 1;
   return count;
@@ -230,6 +232,10 @@ export function matchesStudioFilters(
   if (filters.energies.length && !filters.energies.includes(track.energy)) return false;
   if (filters.textures.length && !filters.textures.some((item) => track.textures.includes(item))) {
     return false;
+  }
+  if (filters.genres?.length) {
+    const genre = track.genre.trim().toLowerCase();
+    if (!filters.genres.some((item) => item.trim().toLowerCase() === genre)) return false;
   }
   if (filters.compatibleKeys && seed) {
     if (!track.key || !keysCompatible(seed.key, track.key)) return false;

@@ -96,10 +96,7 @@ export default function DeckMap({
         });
       }
     }
-    const labelThreshold = Math.max(2, Math.ceil(visible.length * 0.01));
-    return [...acc.values()]
-      .filter((c) => c.n >= labelThreshold)
-      .map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
+    return [...acc.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
   }, [visible]);
 
   const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}:fit-${fitRequestKey}`;
@@ -158,7 +155,7 @@ export default function DeckMap({
   const onHover = useCallback(
     (info: PickingInfo<PlotTrack>) => {
       const track = info.object ?? null;
-      onHoverTrack?.(track?.raw ?? null);
+      onHoverTrack?.(track?.raw ?? null, { x: info.x, y: info.y });
     },
     [onHoverTrack],
   );

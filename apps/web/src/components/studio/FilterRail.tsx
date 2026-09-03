@@ -1,6 +1,8 @@
 "use client";
 
 import { signOut } from "@/lib/auth/actions";
+import { MOODS } from "@/lib/studio/constants";
+import { uniqueGenres } from "@/lib/studio/format";
 import { BpmRange } from "./BpmRange";
 import { CamelotMatrix } from "./CamelotMatrix";
 import { useStudio } from "./StudioProvider";
@@ -14,6 +16,7 @@ export function FilterRail({
 }) {
   const s = useStudio();
   const { filters } = s;
+  const selectedGenres = filters.genres ?? [];
 
   if (compact) {
     return (
@@ -117,6 +120,59 @@ export function FilterRail({
       />
 
       <div className="my-4 h-px bg-[#171B21]" />
+      <div className="px-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">Vibe</span>
+          {filters.moods.length ? (
+            <button
+              type="button"
+              className="bg-transparent text-[11.5px] text-[#E9A63C]"
+              onClick={() => s.setFilters({ ...filters, moods: [] })}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {MOODS.map((mood) => (
+            <FilterChip
+              key={mood}
+              label={mood}
+              on={filters.moods.includes(mood)}
+              capitalize
+              onClick={() => s.setFilters({ ...filters, moods: toggleValue(filters.moods, mood) })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="my-4 h-px bg-[#171B21]" />
+      <div className="px-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">Genre</span>
+          {selectedGenres.length ? (
+            <button
+              type="button"
+              className="bg-transparent text-[11.5px] text-[#E9A63C]"
+              onClick={() => s.setFilters({ ...filters, genres: [] })}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {uniqueGenres(s.tracks).map((genre) => (
+            <FilterChip
+              key={genre}
+              label={genre}
+              on={selectedGenres.some((item) => item.toLowerCase() === genre.toLowerCase())}
+              onClick={() => s.setFilters({ ...filters, genres: toggleValue(selectedGenres, genre) })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="my-4 h-px bg-[#171B21]" />
       <div className="flex items-center justify-between px-2.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">Crates</span>
         <button
@@ -191,6 +247,40 @@ export function FilterRail({
         )}
       </div>
     </aside>
+  );
+}
+
+function toggleValue<T extends string>(list: T[], item: T): T[] {
+  const match = list.find((value) => value.toLowerCase() === item.toLowerCase());
+  if (match) return list.filter((value) => value !== match);
+  return [...list, item];
+}
+
+function FilterChip({
+  label,
+  on,
+  onClick,
+  capitalize = false,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  capitalize?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`rounded-full border px-2.5 py-1 text-[11.5px] ${capitalize ? "capitalize" : ""}`}
+      style={{
+        color: on ? "#181203" : "#98A0AE",
+        background: on ? "#E9A63C" : "transparent",
+        borderColor: on ? "#E9A63C" : "#262B34",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

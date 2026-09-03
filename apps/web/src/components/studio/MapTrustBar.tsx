@@ -16,13 +16,10 @@ export function MapTrustBar() {
     if (s.seed) {
       summary += ` · similar to “${s.seed.title}”`;
     }
-    if (!s.analysisReady) {
-      summary +=
-        s.librarySource === "disk"
-          ? " · map positions are placeholders until analysis — distance is not sonic similarity yet"
-          : s.librarySource === "preview"
-            ? " · map positions are placeholders until analysis — distance is not sonic similarity yet"
-            : "";
+    if (s.librarySource === "preview") {
+      summary += " · islands are genres · spacing inside an island follows sonic analysis";
+    } else if (!s.analysisReady && s.librarySource === "disk") {
+      summary += " · map positions are placeholders until analysis — distance is not sonic similarity yet";
     }
   }
 

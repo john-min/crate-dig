@@ -5,6 +5,7 @@ import { useStudio } from "./StudioProvider";
 export function FilterChipBar() {
   const s = useStudio();
   const { filters } = s;
+  const selectedGenres = filters.genres ?? [];
   const bpmActive = filters.bpmMin > s.bpmBounds.min || filters.bpmMax < s.bpmBounds.max;
   const bpmLabel = `${Math.round(filters.bpmMin)}–${Math.round(filters.bpmMax)}`;
 
@@ -15,7 +16,18 @@ export function FilterChipBar() {
           key={mood}
           label={mood}
           active
+          className="capitalize"
           onClick={() => s.setFilters({ ...filters, moods: filters.moods.filter((item) => item !== mood) })}
+        />
+      ))}
+      {selectedGenres.map((genre) => (
+        <Chip
+          key={genre}
+          label={genre}
+          active
+          onClick={() =>
+            s.setFilters({ ...filters, genres: selectedGenres.filter((item) => item !== genre) })
+          }
         />
       ))}
       {filters.energies.map((energy) => (
@@ -23,6 +35,7 @@ export function FilterChipBar() {
           key={energy}
           label={energy}
           active
+          className="capitalize"
           onClick={() =>
             s.setFilters({ ...filters, energies: filters.energies.filter((item) => item !== energy) })
           }
@@ -52,16 +65,18 @@ function Chip({
   label,
   active,
   onClick,
+  className = "",
 }: {
   label: string;
   active?: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`h-7 shrink-0 rounded-full px-2.5 text-[11.5px] capitalize ${
+      className={`h-7 shrink-0 rounded-full px-2.5 text-[11.5px] ${className} ${
         active ? "bg-[#241C3D] text-[#C4B6F5]" : "border border-[#262B34] text-[#98A0AE] hover:text-[#EDEFF3]"
       }`}
     >
