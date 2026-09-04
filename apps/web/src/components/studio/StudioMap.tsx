@@ -8,28 +8,6 @@ import { MapLegend } from "./MapLegend";
 import { NoResults } from "./NoResults";
 import { MapFallbackList } from "./MapFallbackList";
 import { useStudio } from "./StudioProvider";
-import type { StudioTrack } from "@/lib/studio/types";
-
-/** Display-only color gradient; not a recommendation or sonic similarity score. */
-function prototypeCentroidDisplayScores(tracks: StudioTrack[]): Record<string, number> {
-  const n = tracks.length;
-  if (!n) return {};
-  let cx = 0;
-  let cy = 0;
-  for (const track of tracks) {
-    cx += track.umap_x;
-    cy += track.umap_y;
-  }
-  cx /= n;
-  cy /= n;
-  const dists = tracks.map((track) => Math.hypot(track.umap_x - cx, track.umap_y - cy));
-  const maxDist = Math.max(...dists, 0.001);
-  const out: Record<string, number> = {};
-  for (let i = 0; i < tracks.length; i++) {
-    out[tracks[i].id] = 1 - dists[i] / maxDist;
-  }
-  return out;
-}
 
 export function StudioMap() {
   const s = useStudio();
@@ -38,8 +16,7 @@ export function StudioMap() {
   const [hover, setHover] = useState<{ track: MapTrack; x: number; y: number } | null>(null);
   const visibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible]);
   const scores = useMemo(() => {
-    if (!analysisReady) return {};
-    if (!seed) return prototypeCentroidDisplayScores(visible);
+    if (!analysisReady || !seed) return {};
     const out: Record<string, number> = {};
     for (const track of visible) {
       const score = scoreFor(track);
@@ -65,11 +42,11 @@ export function StudioMap() {
           scores={scores}
           fitRequestKey={fitRequestKey}
           onSelectTrack={(id) => {
-            if (id) s.selectTrack(id);
+            if (id) s.openDrawer(id);
             else s.selectTrack(null);
           }}
           onHoverTrack={(track, point) => {
-            if (!track || !point) {
+            if (!track || !point || s.drawerOpen) {
               setHover(null);
               return;
             }
@@ -77,9 +54,9 @@ export function StudioMap() {
           }}
           onWebgl={s.setWebglOk}
         />
-        {hover ? <MapHoverCard hover={hover} /> : null}
+        {hover && !s.drawerOpen ? <MapHoverCard hover={hover} /> : null}
         <MapLegend onFit={() => setFitRequestKey((key) => key + 1)} />
-        {s.selectedIds.length > 0 ? <SelectionActions /> : null}
+        {s.selectedIds.length > 1 ? <SelectionActions /> : null}
       </div>
     </div>
   );

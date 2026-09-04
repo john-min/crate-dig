@@ -8,16 +8,18 @@ export function MapTrustBar() {
   const visible = s.visible.length;
   const qApplied = Boolean(s.qAsk && (s.qStatus === "found" || s.qStatus === "empty"));
 
+  const colorLabel = s.colorBy === "cluster" ? "genre" : s.colorBy;
+
   let summary: string;
   if (qApplied) {
-    summary = `Q applied "${s.qAsk}" — showing ${visible.toLocaleString()} of ${total.toLocaleString()} records, colored by mood`;
+    summary = `Q applied "${s.qAsk}" — showing ${visible.toLocaleString()} of ${total.toLocaleString()} records, colored by ${colorLabel}`;
   } else {
-    summary = `Showing ${visible.toLocaleString()} of ${total.toLocaleString()} records · colored by mood`;
+    summary = `Showing ${visible.toLocaleString()} of ${total.toLocaleString()} records · colored by ${colorLabel}`;
     if (s.seed) {
       summary += ` · similar to “${s.seed.title}”`;
     }
     if (s.librarySource === "preview") {
-      summary += " · islands are genres · spacing inside an island follows sonic analysis";
+      summary += " · scatter follows sonic analysis · colour marks genre";
     } else if (!s.analysisReady && s.librarySource === "disk") {
       summary += " · map positions are placeholders until analysis — distance is not sonic similarity yet";
     }

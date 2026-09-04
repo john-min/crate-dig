@@ -121,15 +121,29 @@ export class MockAdapter implements MockRuntimeAdapter {
   private async tracksForMode(): Promise<readonly Track[]> {
     if (!this.catalogPath) return this.fixtureTracks;
     if (!this.catalogPromise) {
-      this.catalogPromise = this.fetchCatalog();
+      this.catalogPromise = this.fetchCatalog().catch((error) => {
+        this.catalogPromise = null;
+        throw error;
+      });
     }
     return this.catalogPromise;
   }
 
   private async fetchCatalog(): Promise<readonly Track[]> {
-    const response = await this.requestFetch(this.catalogPath!, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error("Demo catalog is unavailable.");
+    let response: Response | null = null;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        response = await this.requestFetch(this.catalogPath!, { cache: "no-store" });
+        if (response.ok) break;
+        lastError = new Error(`Demo catalog is unavailable (${response.status}).`);
+      } catch (error) {
+        lastError = error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+    if (!response?.ok) {
+      throw lastError instanceof Error ? lastError : new Error("Demo catalog is unavailable.");
     }
     const body = (await response.json()) as {
       library?: { id?: string; name?: string; source?: string };

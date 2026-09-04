@@ -51,7 +51,7 @@ export function MapOverlays({
                 colorBy === value ? "bg-[var(--control)] text-paper" : "text-muted hover:text-paper"
               }`}
             >
-              {value}
+              {value === "cluster" ? "genre" : value}
             </button>
           ))}
         </div>

@@ -94,7 +94,7 @@ export function StudioApp({ signedIn = false }: { signedIn?: boolean }) {
           {s.drawerOpen && nowPlayingCard ? <NowPlayingCard /> : null}
 
           {s.drawerOpen && !drawerSheet && !nowPlayingCard && !(exclusive && sidecarOpen) ? (
-            <div className="absolute inset-y-0 right-0 z-20 hidden md:block">
+            <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
               <TrackDrawer />
             </div>
           ) : null}

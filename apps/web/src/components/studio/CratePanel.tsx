@@ -51,7 +51,7 @@ export function CratePanel({ overlay = false }: { overlay?: boolean }) {
         {rows.length === 0 ? (
           <div className="m-4 rounded-[11px] border border-dashed border-[#2A2F39] px-[22px] py-[22px] text-center">
             <p className="text-[12.5px] leading-[1.6] text-[#98A0AE]">
-              Empty crate. Add tracks from the map or the list — every record has a “+ Crate” action.
+              Empty crate. Use the persimmon next to a track title to add records here.
             </p>
           </div>
         ) : (

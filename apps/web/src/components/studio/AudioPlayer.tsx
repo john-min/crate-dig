@@ -3,6 +3,7 @@
 import { formatBpm, formatDuration, formatKey } from "@/lib/studio/format";
 import { waveformPeaks } from "@/lib/studio/waveform";
 import { MOOD_COLORS } from "@/lib/studio/constants";
+import { CrateAddButton } from "./CrateAddButton";
 import { useStudio } from "./StudioProvider";
 import { IconPause, IconPlay, IconSkipBack, IconSkipForward } from "./icons";
 
@@ -57,6 +58,8 @@ export function AudioPlayer() {
             <p className="mt-0.5 truncate text-[12px] leading-tight text-[#8B929F]">{subtitle}</p>
           </div>
         </div>
+
+        {track ? <CrateAddButton track={track} menuPlacement="above" /> : null}
 
         <Transport
           canPlay={canPlay}

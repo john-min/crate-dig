@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { LOCAL_ANALYSIS_NEIGHBOR_CHANNEL, type Neighbor } from "@crate-dig/contracts";
 
@@ -15,11 +14,10 @@ type SqliteDatabase = {
 };
 
 function openSqlite(filePath: string): SqliteDatabase {
-  const require = createRequire(import.meta.url);
-  const { DatabaseSync } = require("node:sqlite") as {
+  const sqlite = process.getBuiltinModule("node:sqlite") as {
     DatabaseSync: new (path: string, options?: { readOnly?: boolean }) => SqliteDatabase;
   };
-  return new DatabaseSync(filePath, { readOnly: true });
+  return new sqlite.DatabaseSync(filePath, { readOnly: true });
 }
 
 export function sqliteNeighborsAvailable(filePath = demoSimilaritySqlitePath()): boolean {

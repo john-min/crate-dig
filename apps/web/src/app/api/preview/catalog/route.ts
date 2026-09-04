@@ -4,7 +4,7 @@ import { loadDemoPreviewCatalog, previewCatalogConfigured } from "@/lib/preview/
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isDemoPreviewApiEnabled()) {
     return notFound("Preview catalog is not available in local mode.");
   }
@@ -14,8 +14,9 @@ export async function GET() {
       "Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SECRET_KEY. Seed the source=demo library.",
     );
   }
+  const refresh = new URL(request.url).searchParams.get("refresh") === "1";
   try {
-    const { libraries, tracks } = await loadDemoPreviewCatalog();
+    const { libraries, tracks } = await loadDemoPreviewCatalog(refresh);
     return Response.json({
       library: libraries[0] ?? {
         id: "preview-demo",
@@ -25,13 +26,24 @@ export async function GET() {
       tracks,
     });
   } catch (error) {
+    const message = catalogErrorMessage(error);
+    console.error("[preview/catalog]", message, error);
     return jsonError(
       {
         code: "CLOUD_QUERY_FAILED",
-        message: error instanceof Error ? error.message : "Could not load the demo catalog.",
+        message,
         retryable: true,
       },
       500,
     );
   }
+}
+
+function catalogErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "Could not load the demo catalog.";
 }

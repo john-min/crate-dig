@@ -109,10 +109,12 @@ type StudioContextValue = {
   setActiveCrateId: (id: string) => void;
   activeCrate: Crate | null;
   crateColor: (id: string) => string;
-  createCrate: () => void;
+  createCrate: (options?: { name?: string; trackId?: string; open?: boolean }) => string;
   duplicateCrate: (id: string) => void;
   addToCrate: (id: string) => void;
   removeFromCrate: (id: string) => void;
+  toggleTrackInCrate: (trackId: string, crateId: string) => void;
+  removeTrackFromAllCrates: (trackId: string) => void;
   listHeight: number;
   setListHeight: (value: number) => void;
   density: RowDensity;
@@ -197,7 +199,7 @@ export function StudioProvider({
     items: readonly Neighbor[];
   } | null>(null);
   const [filters, setFilters] = useState<StudioFilters>(EMPTY_FILTERS);
-  const [colorBy, setColorBy] = useState<ColorBy>("mood");
+  const [colorBy, setColorBy] = useState<ColorBy>("cluster");
   const [seedId, setSeedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
@@ -982,17 +984,32 @@ export function StudioProvider({
     [crates],
   );
 
-  const createCrate = useCallback(() => {
-    const id = `crate-${Date.now()}`;
-    const name = `Crate ${crates.length + 1}`;
-    setCrates((prev) => [
-      ...prev,
-      { id, name, trackIds: [], intention: "", room: "", timeOfDay: "" },
-    ]);
-    setActiveCrateId(id);
-    setSidecar("crate");
-    announce(`${name} created.`);
-  }, [announce, crates.length]);
+  const createCrate = useCallback(
+    (options?: { name?: string; trackId?: string; open?: boolean }) => {
+      const id = `crate-${Date.now()}`;
+      const requested = options?.name?.trim();
+      let name = requested || "";
+      setCrates((prev) => {
+        name = requested || `Crate ${prev.length + 1}`;
+        return [
+          ...prev,
+          {
+            id,
+            name,
+            trackIds: options?.trackId ? [options.trackId] : [],
+            intention: "",
+            room: "",
+            timeOfDay: "",
+          },
+        ];
+      });
+      setActiveCrateId(id);
+      if (options?.open ?? true) setSidecar("crate");
+      announce(options?.trackId ? `${name} created and track added.` : `${name} created.`);
+      return id;
+    },
+    [announce],
+  );
 
   const duplicateCrate = useCallback(
     (id: string) => {
@@ -1036,6 +1053,44 @@ export function StudioProvider({
       announce(track ? `Removed ${track.title} from crate.` : "Removed from crate");
     },
     [activeCrateId, announce, tracks],
+  );
+
+  const toggleTrackInCrate = useCallback(
+    (trackId: string, crateId: string) => {
+      const track = tracks.find((t) => t.id === trackId);
+      const crate = crates.find((item) => item.id === crateId);
+      let added = false;
+      setCrates((prev) =>
+        prev.map((item) => {
+          if (item.id !== crateId) return item;
+          const has = item.trackIds.includes(trackId);
+          added = !has;
+          return {
+            ...item,
+            trackIds: has ? item.trackIds.filter((id) => id !== trackId) : [...item.trackIds, trackId],
+          };
+        }),
+      );
+      if (track && crate) {
+        announce(added ? `Added ${track.title} to ${crate.name}.` : `Removed ${track.title} from ${crate.name}.`);
+      }
+    },
+    [announce, crates, tracks],
+  );
+
+  const removeTrackFromAllCrates = useCallback(
+    (trackId: string) => {
+      const track = tracks.find((t) => t.id === trackId);
+      setCrates((prev) =>
+        prev.map((crate) =>
+          crate.trackIds.includes(trackId)
+            ? { ...crate, trackIds: crate.trackIds.filter((id) => id !== trackId) }
+            : crate,
+        ),
+      );
+      announce(track ? `Removed ${track.title} from all crates.` : "Removed from all crates.");
+    },
+    [announce, tracks],
   );
 
   const selectNearest = useCallback(
@@ -1148,6 +1203,8 @@ export function StudioProvider({
     duplicateCrate,
     addToCrate,
     removeFromCrate,
+    toggleTrackInCrate,
+    removeTrackFromAllCrates,
     listHeight,
     setListHeight,
     density,

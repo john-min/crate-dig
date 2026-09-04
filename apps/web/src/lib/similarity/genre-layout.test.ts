@@ -3,7 +3,7 @@ import { layoutGenreIslands } from "./genre-layout";
 import { projectPca2d } from "./pca";
 
 describe("layoutGenreIslands", () => {
-  it("keeps genres far apart and members near their island", () => {
+  it("keeps local scatter and pulls different genres farther apart", () => {
     const laid = layoutGenreIslands([
       { id: "a1", genre: "Techno", x: 0.1, y: 0.2 },
       { id: "a2", genre: "Techno", x: 0.2, y: 0.1 },
@@ -17,10 +17,47 @@ describe("layoutGenreIslands", () => {
     expect(technoA.cluster).not.toBe(disco.cluster);
     const intra = Math.hypot(technoA.x - technoB.x, technoA.y - technoB.y);
     const inter = Math.hypot(technoA.x - disco.x, technoA.y - disco.y);
-    expect(intra).toBeLessThan(5);
-    expect(inter).toBeGreaterThan(intra * 3);
+    expect(intra).toBeGreaterThan(0.05);
+    expect(intra).toBeLessThan(1);
+    expect(inter).toBeGreaterThan(intra * 8);
   });
 
+  it("packs stacked house genres into non-overlapping islands", () => {
+    const genres = [
+      "Deep House",
+      "Disco House",
+      "Funky House",
+      "Organic House",
+      "Progressive House",
+      "Melodic House",
+    ];
+    const points = genres.flatMap((genre, genreIndex) =>
+      Array.from({ length: 12 }, (_, index) => ({
+        id: `${genre}-${index}`,
+        genre,
+        x: 0.04 * Math.cos(index) + genreIndex * 0.01,
+        y: 0.04 * Math.sin(index) + genreIndex * 0.008,
+      })),
+    );
+    const laid = layoutGenreIslands(points);
+    const islands = genres.map((genre) => {
+      const members = points
+        .filter((point) => point.genre === genre)
+        .map((point) => laid.get(point.id)!);
+      const cx = members.reduce((sum, item) => sum + item.x, 0) / members.length;
+      const cy = members.reduce((sum, item) => sum + item.y, 0) / members.length;
+      const dists = members.map((item) => Math.hypot(item.x - cx, item.y - cy)).sort((a, b) => a - b);
+      const radius = dists[Math.floor((dists.length - 1) * 0.9)] ?? 0;
+      return { genre, cx, cy, radius };
+    });
+
+    for (let i = 0; i < islands.length; i += 1) {
+      for (let j = i + 1; j < islands.length; j += 1) {
+        const dist = Math.hypot(islands[i].cx - islands[j].cx, islands[i].cy - islands[j].cy);
+        expect(dist).toBeGreaterThan(islands[i].radius + islands[j].radius + 0.8);
+      }
+    }
+  });
   it("merges Nu-Disco into Nu Disco", () => {
     const laid = layoutGenreIslands([
       { id: "a", genre: "Nu-Disco", x: 0, y: 0 },

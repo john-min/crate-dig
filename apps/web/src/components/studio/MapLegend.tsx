@@ -40,12 +40,16 @@ export function MapLegend({ onFit }: { onFit: () => void }) {
         className="pointer-events-auto flex items-center gap-[11px] rounded-[10px] border border-[#1F232B] bg-[#0C0E12E6] px-3 py-[9px]"
         aria-label={`${s.colorBy} color legend`}
       >
-        {items.map((item) => (
-          <span key={item.label} className="inline-flex items-center gap-[5px] text-[11.5px] text-[#B7BEC9]">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} aria-hidden />
-            {item.label}
-          </span>
-        ))}
+        {s.colorBy === "cluster" ? (
+          <span className="text-[11.5px] text-[#B7BEC9]">each cluster is a genre</span>
+        ) : (
+          items.map((item) => (
+            <span key={item.label} className="inline-flex items-center gap-[5px] text-[11.5px] text-[#B7BEC9]">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} aria-hidden />
+              {item.label}
+            </span>
+          ))
+        )}
       </div>
       <button
         type="button"

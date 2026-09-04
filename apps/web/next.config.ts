@@ -17,6 +17,7 @@ if (
 }
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["node:sqlite"],
   turbopack: {
     root: workspaceRoot,
   },
