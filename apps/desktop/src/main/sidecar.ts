@@ -38,7 +38,7 @@ export class SidecarSupervisor {
 
   constructor(options: SidecarSupervisorOptions) {
     this.options = options;
-    this.requestFetch = options.fetch ?? fetch;
+    this.requestFetch = options.fetch ?? fetch.bind(globalThis);
     this.snapshot = {
       status: "stopped",
       mode: parseSidecarMode(options.env?.CRATE_DIG_SIDECAR_MODE ?? process.env.CRATE_DIG_SIDECAR_MODE),

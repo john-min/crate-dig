@@ -13,7 +13,10 @@ pnpm --filter desktop start
 pnpm --filter desktop typecheck
 pnpm --filter desktop test
 pnpm --filter desktop lint
+pnpm --filter desktop package
 ```
+
+The repo `.npmrc` sets `node-linker=hoisted` because Electron Forge packaging cannot use pnpm's default isolated linker. Dev start, typecheck, and tests use the same install.
 
 `pnpm desktop` is an alias for `pnpm --filter desktop start`.
 

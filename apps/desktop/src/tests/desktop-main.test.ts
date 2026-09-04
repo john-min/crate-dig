@@ -11,6 +11,7 @@ import {
 } from "../main/loopback";
 import { WINDOW_WEB_PREFERENCES } from "../main/security";
 import { SidecarSupervisor, resolveApiCommand, resolveLocalApiRoot } from "../main/sidecar";
+import { rewriteLoopbackCorsHeaders } from "../main/cors-bridge";
 import { presentSecretEnvKeys, readPublishableSupabaseConfig } from "../main/auth-config";
 import { IPC, IPC_INVOKE_CHANNELS, isInvokeChannel } from "../shared/native-api";
 
@@ -86,6 +87,22 @@ describe("loopback and window security", () => {
   it("parses sidecar modes with auto as the default", () => {
     expect(parseSidecarMode("supervise")).toBe("supervise");
     expect(parseSidecarMode(undefined)).toBe("auto");
+  });
+
+  it("replaces FastAPI CORS headers instead of appending a second Allow-Origin", () => {
+    const rewritten = rewriteLoopbackCorsHeaders(
+      {
+        "access-control-allow-origin": ["http://127.0.0.1:3000"],
+        "Content-Type": ["application/json"],
+      },
+      "http://localhost:5173",
+    );
+    const allowOriginKeys = Object.keys(rewritten).filter(
+      (key) => key.toLowerCase() === "access-control-allow-origin",
+    );
+    expect(allowOriginKeys).toEqual(["Access-Control-Allow-Origin"]);
+    expect(rewritten["Access-Control-Allow-Origin"]).toEqual(["http://localhost:5173"]);
+    expect(rewritten["Content-Type"]).toEqual(["application/json"]);
   });
 });
 

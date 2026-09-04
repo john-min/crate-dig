@@ -161,7 +161,7 @@ export class DesktopAdapter implements DesktopRuntimeAdapter {
 
   constructor(options: DesktopAdapterOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-    this.requestFetch = options.fetch ?? fetch;
+    this.requestFetch = options.fetch ?? fetch.bind(globalThis);
     this.authSession = options.getAuthSession;
   }
 

@@ -41,4 +41,21 @@ describe("process boundary scan", () => {
     expect(contents).not.toMatch(/SUPABASE_SECRET_KEY|node:fs|child_process|supabase-js/);
     expect(contents).toContain("isInvokeChannel");
   });
+
+  it("emits Forge main/preload filenames instead of colliding index.js outputs", () => {
+    const pkg = JSON.parse(readFileSync(join(root, "..", "package.json"), "utf8")) as {
+      main: string;
+    };
+    expect(pkg.main).toBe(".vite/build/main.js");
+    expect(readFileSync(join(root, "..", "vite.main.config.ts"), "utf8")).toContain('() => "main.js"');
+    expect(readFileSync(join(root, "..", "vite.preload.config.ts"), "utf8")).toContain(
+      'entryFileNames: "preload.js"',
+    );
+    expect(readFileSync(join(root, "main", "index.ts"), "utf8")).toContain(
+      'preload: path.join(__dirname, "preload.js")',
+    );
+    expect(readFileSync(join(root, "renderer", "adapter", "desktop-adapter.ts"), "utf8")).toContain(
+      "fetch.bind(globalThis)",
+    );
+  });
 });
