@@ -77,6 +77,17 @@ export function FilterRail({
       <div className="my-4 h-px bg-[#171B21]" />
 
       <div className="flex items-center justify-between px-2.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">Filters</span>
+        <button
+          type="button"
+          className="bg-transparent text-[12px] text-[#E9A63C] hover:text-[#F0B85A]"
+          onClick={s.clearFilters}
+        >
+          Reset
+        </button>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between px-2.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7C8698]">BPM</span>
         <span className="text-[12px] text-[#EDEFF3]">{bpmReadout}</span>
       </div>
@@ -179,7 +190,9 @@ export function FilterRail({
           type="button"
           aria-label="New crate"
           className="bg-transparent text-[14px] text-[#98A0AE]"
-          onClick={s.createCrate}
+          onClick={() => {
+            s.createCrate();
+          }}
         >
           +
         </button>

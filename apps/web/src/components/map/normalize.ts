@@ -17,6 +17,11 @@ export function toPlotTrack(track: MapTrack): PlotTrack | null {
     return null;
   }
   const cluster = parseCluster(track);
+  const scored = track as MapTrack & { energyScore?: number | null };
+  const energyScore =
+    typeof scored.energyScore === "number" && Number.isFinite(scored.energyScore)
+      ? scored.energyScore
+      : null;
   return {
     id: track.id,
     title: track.title || "Untitled",
@@ -25,6 +30,7 @@ export function toPlotTrack(track: MapTrack): PlotTrack | null {
     key: track.key ?? "",
     mood: track.mood || "warm",
     energy: track.energy ?? "",
+    energyScore,
     x,
     y,
     cluster,

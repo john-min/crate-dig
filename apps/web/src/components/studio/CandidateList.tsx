@@ -48,7 +48,7 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
       )}
       <div
         role="rowgroup"
-        className="sticky top-0 hidden h-7 shrink-0 items-center bg-[#0D0F13] px-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#5B6373] min-[900px]:grid min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_64px] min-[900px]:gap-2.5"
+        className="sticky top-0 hidden h-7 shrink-0 items-center bg-[#0D0F13] px-4 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#5B6373] min-[900px]:grid min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_32px] min-[900px]:gap-2.5"
       >
         <span />
         <span>Title</span>
@@ -84,7 +84,6 @@ export function CandidateList({ embedded = false }: { embedded?: boolean } = {})
                   if (playingId === track.id && (s.playStatus === "playing" || s.playStatus === "buffering")) s.pause();
                   else s.play(track.id);
                 }}
-                onAdd={() => s.addToCrate(track.id)}
                 onOpen={() => s.openDrawer(track.id)}
               />
             ))}

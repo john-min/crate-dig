@@ -19,7 +19,7 @@ export function MapFallbackList() {
       <p className="mt-2 max-w-[60ch] text-[14px] leading-6 text-paper-dim">
         {s.webglOk
           ? "List view of the current filters. Use this when you want rows instead of points."
-          : "WebGL is unavailable, so the constellation cannot draw. This list is the discovery equivalent: clusters, then tracks."}
+          : "WebGL is unavailable, so the map cannot draw. This list is the discovery equivalent: clusters, then tracks."}
       </p>
       {[...groups.entries()].map(([name, tracks]) => (
         <section key={name} className="mt-6">
@@ -38,7 +38,6 @@ export function MapFallbackList() {
                 score={s.scoreFor(track)}
                 onSelect={() => s.selectTrack(track.id)}
                 onPlay={() => s.play(track.id)}
-                onAdd={() => s.addToCrate(track.id)}
                 onOpen={() => s.openDrawer(track.id)}
               />
             ))}

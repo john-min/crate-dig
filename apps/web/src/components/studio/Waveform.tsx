@@ -38,3 +38,29 @@ export function Waveform({
     </svg>
   );
 }
+
+export function EnergyCurve({
+  peaks,
+  className = "",
+}: {
+  peaks: number[];
+  className?: string;
+}) {
+  const w = Math.max(peaks.length - 1, 1);
+  const line = peaks
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${i} ${(1 - p) * 28 + 2}`)
+    .join(" ");
+  const area = `${line} L ${w} 30 L 0 30 Z`;
+  return (
+    <svg
+      className={`h-[72px] w-full ${className}`}
+      viewBox={`0 0 ${peaks.length} 32`}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Energy curve"
+    >
+      <path d={area} fill="rgba(233,166,60,0.22)" />
+      <path d={line} fill="none" stroke="#E9A63C" strokeWidth="1.15" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}

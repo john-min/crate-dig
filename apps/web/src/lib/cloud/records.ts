@@ -203,10 +203,12 @@ export async function listDemoLibraries(supabase: SupabaseClient): Promise<Libra
   }));
 }
 
-export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<Track[]> {
+export async function listDemoLibraryTracks(
+  supabase: SupabaseClient,
+): Promise<{ tracks: Track[]; objectKeys: Map<string, string> }> {
   const libraries = await listDemoLibraries(supabase);
   const ids = libraries.map((library) => library.id);
-  if (ids.length === 0) return [];
+  if (ids.length === 0) return { tracks: [], objectKeys: new Map() };
   const { data, error } = await supabase
     .from("tracks")
     .select(TRACK_SELECT)
@@ -214,13 +216,15 @@ export async function listDemoLibraryTracks(supabase: SupabaseClient): Promise<T
     .order("artist", { ascending: true })
     .order("title", { ascending: true });
   if (error) throw error;
-  const tracks = ((data ?? []) as TrackRow[]).map((row) =>
-    mapTrackRow({
-      ...row,
-      audio_objects: restrictDemoAudioObjects(row.audio_objects),
-    }),
-  );
-  return applyGenreIslandProjection(supabase, tracks);
+  const objectKeys = new Map<string, string>();
+  const tracks = ((data ?? []) as TrackRow[]).map((row) => {
+    const audioObjects = restrictDemoAudioObjects(row.audio_objects);
+    const objectKey = pickPlaybackObjectKey(audioObjects);
+    const track = mapTrackRow({ ...row, audio_objects: audioObjects });
+    if (objectKey) objectKeys.set(track.id, objectKey);
+    return track;
+  });
+  return { tracks: await applyGenreIslandProjection(supabase, tracks), objectKeys };
 }
 
 export async function demoPlaybackObjectKey(

@@ -36,6 +36,7 @@ export type PlotTrack = {
   key: string;
   mood: string;
   energy: string;
+  energyScore: number | null;
   x: number;
   y: number;
   cluster: number;

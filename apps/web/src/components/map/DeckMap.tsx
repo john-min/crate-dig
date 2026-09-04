@@ -3,14 +3,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeckGL } from "@deck.gl/react";
 import { OrthographicView, type OrthographicViewState, type PickingInfo } from "@deck.gl/core";
-import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { IconLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import fixture from "@/data/synthetic-tracks-3k.json";
 import type { MapTrack } from "@/lib/types/track";
 import type { ColorBy, MapCanvasProps, PlotTrack } from "./types";
 import { toPlotTracks } from "./normalize";
-import { clusterRgb, dimFill, glowFill, HIGHLIGHT, trackFill } from "./colors";
+import { clusterIslands, largestIslands } from "./cluster-islands";
+import { dimFill, fieldFill, GLOW_FILL_ALPHA, glowFill, HIGHLIGHT, neighborFill, trackFill } from "./colors";
+import { createNebulaAtlas, NEBULA_ICON, NEBULA_MAPPING } from "./nebula-atlas";
 import { fitTracksToView } from "./fitView";
-import { glowRadiusFromScore, radiusFromScore } from "./radius";
+import {
+  FIELD_RADIUS_MIN_PX,
+  FIELD_RADIUS_PX,
+  glowRadiusForTrack,
+  isNeighborScore,
+  PLAYING_RADIUS_PX,
+  radiusForTrack,
+  SEED_RADIUS_PX,
+  SELECTED_RADIUS_PX,
+} from "./radius";
+
+/** Tunable visual treatment — keep these together. */
+const LABEL_TOP_N = 6;
+const LABEL_NAME_SIZE = 10;
+const LABEL_COUNT_SIZE = 9;
+const LABEL_NAME_ALPHA = 102;
+const LABEL_COUNT_ALPHA = 52;
+const NEBULA_ALPHA = 8;
+const NEBULA_SIZE_MULT = 1.45;
+const NEBULA_MIN_PX = 16;
+const NEBULA_MAX_PX = 56;
+const FIT_ZOOM_OUT = 0.14;
+const PICKING_RADIUS_PX = 10;
 
 const VIEW = new OrthographicView({
   id: "track-map",
@@ -24,6 +48,10 @@ const VIEW = new OrthographicView({
     keyboard: false,
   },
 });
+
+function trackedLabel(name: string): string {
+  return name.split("").join(" ");
+}
 
 export default function DeckMap({
   tracks,
@@ -44,6 +72,7 @@ export default function DeckMap({
   const [userView, setUserView] = useState<OrthographicViewState | null>(null);
   const [viewKey, setViewKey] = useState<string | null>(null);
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
+  const [nebulaAtlas, setNebulaAtlas] = useState<string | null>(null);
 
   const usingFixture = !tracks?.length;
   const plotTracks = useMemo(() => {
@@ -51,10 +80,11 @@ export default function DeckMap({
     return toPlotTracks(source);
   }, [tracks, usingFixture]);
 
-  const colorBy: ColorBy = colorByProp ?? "mood";
+  const colorBy: ColorBy = colorByProp ?? "cluster";
   const selectedId = selectedTrackId ?? internalSelected;
   const playingId = playingTrackId;
   const seedIds = useMemo(() => new Set(seedTrackIds ?? []), [seedTrackIds]);
+  const hasSeed = seedIds.size > 0;
 
   const { visible, dimmed } = useMemo(() => {
     if (!visibleIds) return { visible: plotTracks, dimmed: [] as PlotTrack[] };
@@ -77,27 +107,8 @@ export default function DeckMap({
     [plotTracks, selectedId],
   );
 
-  const labels = useMemo(() => {
-    const acc = new Map<number, { name: string; x: number; y: number; n: number; color: [number, number, number] }>();
-    for (const track of visible) {
-      if (track.cluster < 0) continue;
-      const cur = acc.get(track.cluster);
-      if (cur) {
-        cur.x += track.x;
-        cur.y += track.y;
-        cur.n += 1;
-      } else {
-        acc.set(track.cluster, {
-          name: track.clusterName.toUpperCase(),
-          x: track.x,
-          y: track.y,
-          n: 1,
-          color: clusterRgb(track.cluster),
-        });
-      }
-    }
-    return [...acc.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
-  }, [visible]);
+  const islands = useMemo(() => clusterIslands(visible), [visible]);
+  const labels = useMemo(() => largestIslands(islands, LABEL_TOP_N), [islands]);
 
   const dataKey = `${plotTracks.length}:${size.width.toFixed(0)}x${size.height.toFixed(0)}:fit-${fitRequestKey}`;
   const fitted = useMemo(
@@ -108,7 +119,7 @@ export default function DeckMap({
     () =>
       ({
         target: fitted.target,
-        zoom: fitted.zoom,
+        zoom: fitted.zoom - FIT_ZOOM_OUT,
         minZoom: -3,
         maxZoom: 8,
       }) as OrthographicViewState,
@@ -128,6 +139,11 @@ export default function DeckMap({
   }, []);
 
   useEffect(() => {
+    const atlas = createNebulaAtlas();
+    setNebulaAtlas(atlas?.toDataURL("image/png") ?? null);
+  }, []);
+
+  useEffect(() => {
     try {
       const canvas = document.createElement("canvas");
       const ok = Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
@@ -140,7 +156,12 @@ export default function DeckMap({
   }, []);
 
   const applyFit = useCallback(() => {
-    setUserView({ target: fitted.target, zoom: fitted.zoom, minZoom: -3, maxZoom: 8 });
+    setUserView({
+      target: fitted.target,
+      zoom: fitted.zoom - FIT_ZOOM_OUT,
+      minZoom: -3,
+      maxZoom: 8,
+    });
     setViewKey(dataKey);
   }, [dataKey, fitted.target, fitted.zoom]);
 
@@ -176,39 +197,48 @@ export default function DeckMap({
     const common = {
       pickable: false,
       radiusUnits: "pixels" as const,
-      radiusMinPixels: 1.4,
+      radiusMinPixels: FIELD_RADIUS_MIN_PX,
       antialiasing: true,
     };
     const hasScores = Boolean(scores && Object.keys(scores).length);
-    const fillKey = `${colorBy}:${hasScores}:${Object.keys(scores ?? {}).length}`;
-    const radiusOf = (id: string) => radiusFromScore(scoreOf(id));
-    const glowOf = (id: string) => glowRadiusFromScore(scoreOf(id));
+    const fillKey = `${colorBy}:${hasScores}:${Object.keys(scores ?? {}).length}:${hasSeed}`;
+    const glowing = hasSeed
+      ? visible.filter((track) => seedIds.has(track.id) || isNeighborScore(scoreOf(track.id)))
+      : [];
 
     return [
-      new ScatterplotLayer({
-        id: "cluster-fields",
-        data: labels,
-        pickable: false,
-        radiusUnits: "pixels",
-        getPosition: (d: { x: number; y: number }) => [d.x, d.y],
-        getRadius: (d: { n: number }) => Math.min(96, 50 + Math.sqrt(d.n) * 2.2),
-        getFillColor: (d: { color: [number, number, number] }) => [...d.color, 8],
-      }),
+      nebulaAtlas
+        ? new IconLayer({
+            id: "cluster-fields",
+            data: labels,
+            iconAtlas: nebulaAtlas,
+            iconMapping: NEBULA_MAPPING,
+            getIcon: () => NEBULA_ICON,
+            getPosition: (d: { x: number; y: number }) => [d.x, d.y],
+            getSize: (d: { coreRadius: number }) => d.coreRadius * NEBULA_SIZE_MULT,
+            sizeUnits: "common",
+            sizeMinPixels: NEBULA_MIN_PX,
+            sizeMaxPixels: NEBULA_MAX_PX,
+            getColor: (d: { color: [number, number, number] }) => [...d.color, NEBULA_ALPHA],
+            alphaCutoff: 0.004,
+            pickable: false,
+          })
+        : null,
       new ScatterplotLayer<PlotTrack>({
         ...common,
         id: "tracks-dim",
         data: dimmed,
         getPosition: (d) => [d.x, d.y],
-        getRadius: 2.0,
+        getRadius: FIELD_RADIUS_PX,
         getFillColor: dimFill(),
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
         id: "tracks-glow",
-        data: visible,
+        data: glowing,
         getPosition: (d) => [d.x, d.y],
-        getRadius: (d) => glowOf(d.id),
-        getFillColor: (d) => glowFill(d, colorBy, scoreOf(d.id)),
+        getRadius: (d) => glowRadiusForTrack(scoreOf(d.id)),
+        getFillColor: (d) => glowFill(d, colorBy, scoreOf(d.id), GLOW_FILL_ALPHA),
         updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
@@ -217,8 +247,11 @@ export default function DeckMap({
         data: visible,
         pickable: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: (d) => radiusOf(d.id),
-        getFillColor: (d) => trackFill(d, colorBy, 210, scoreOf(d.id)),
+        getRadius: (d) => radiusForTrack(scoreOf(d.id)),
+        getFillColor: (d) =>
+          isNeighborScore(scoreOf(d.id))
+            ? neighborFill(d, colorBy, scoreOf(d.id))
+            : fieldFill(d, colorBy, scoreOf(d.id)),
         updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
@@ -227,12 +260,12 @@ export default function DeckMap({
         data: seeds,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: (d) => Math.max(radiusOf(d.id), 7.4),
+        getRadius: SEED_RADIUS_PX,
         getFillColor: (d) => trackFill(d, colorBy, 255, scoreOf(d.id)),
         getLineColor: [...HIGHLIGHT.seed, 240],
-        getLineWidth: 1.5,
+        getLineWidth: 1.25,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
+        updateTriggers: { getFillColor: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -240,12 +273,11 @@ export default function DeckMap({
         data: playing,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: (d) => Math.max(radiusOf(d.id), 7.8),
+        getRadius: PLAYING_RADIUS_PX,
         getFillColor: [...HIGHLIGHT.playing, 230],
         getLineColor: [232, 224, 210, 220],
-        getLineWidth: 1.5,
+        getLineWidth: 1.25,
         lineWidthUnits: "pixels",
-        updateTriggers: { getRadius: fillKey },
       }),
       new ScatterplotLayer<PlotTrack>({
         ...common,
@@ -253,21 +285,21 @@ export default function DeckMap({
         data: selectedArr,
         stroked: true,
         getPosition: (d) => [d.x, d.y],
-        getRadius: (d) => Math.max(radiusOf(d.id), 8.2),
+        getRadius: SELECTED_RADIUS_PX,
         getFillColor: (d) => trackFill(d, colorBy, 255, scoreOf(d.id)),
         getLineColor: [...HIGHLIGHT.selected, 255],
-        getLineWidth: 2,
+        getLineWidth: 1.5,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: fillKey, getRadius: fillKey },
+        updateTriggers: { getFillColor: fillKey },
       }),
       new TextLayer({
         id: "cluster-label-names",
         data: labels,
         getPosition: (d: { x: number; y: number }) => [d.x, d.y],
-        getText: (d: { name: string }) => d.name,
-        getSize: 11,
-        getColor: (d: { color: [number, number, number] }) => [...d.color, 205],
-        getPixelOffset: [0, -7],
+        getText: (d: { name: string }) => trackedLabel(d.name),
+        getSize: LABEL_NAME_SIZE,
+        getColor: (d: { color: [number, number, number] }) => [...d.color, LABEL_NAME_ALPHA],
+        getPixelOffset: [0, -8],
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",
         fontFamily: "Instrument Sans, ui-sans-serif, sans-serif",
@@ -279,17 +311,17 @@ export default function DeckMap({
         data: labels,
         getPosition: (d: { x: number; y: number }) => [d.x, d.y],
         getText: (d: { n: number }) => `${d.n.toLocaleString()} records`,
-        getSize: 11,
-        getColor: [91, 99, 115, 185],
-        getPixelOffset: [0, 8],
+        getSize: LABEL_COUNT_SIZE,
+        getColor: [91, 99, 115, LABEL_COUNT_ALPHA],
+        getPixelOffset: [0, 7],
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",
         fontFamily: "Instrument Sans, ui-sans-serif, sans-serif",
         fontSettings: { sdf: false },
         pickable: false,
       }),
-    ];
-  }, [colorBy, dimmed, labels, playing, scoreOf, scores, seeds, selectedArr, visible]);
+    ].filter(Boolean);
+  }, [colorBy, dimmed, hasSeed, labels, nebulaAtlas, playing, scoreOf, scores, seedIds, seeds, selectedArr, visible]);
 
   const panZoom = useCallback(
     (event: React.KeyboardEvent) => {
@@ -345,6 +377,7 @@ export default function DeckMap({
           setViewKey(dataKey);
         }}
         layers={layers}
+        pickingRadius={PICKING_RADIUS_PX}
         onHover={onHover}
         onClick={onClick}
         getCursor={({ isHovering, isDragging }) =>

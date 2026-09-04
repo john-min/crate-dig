@@ -2,7 +2,7 @@ export function fitTracksToView(
   tracks: { x: number; y: number }[],
   width: number,
   height: number,
-  padding = 64,
+  padding = 110,
 ): { target: [number, number, number]; zoom: number } {
   if (!tracks.length || width < 8 || height < 8) {
     return { target: [0, 0, 0], zoom: 0 };

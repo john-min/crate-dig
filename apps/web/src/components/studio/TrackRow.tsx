@@ -3,6 +3,7 @@
 import { TRACK_ROW_HEIGHT } from "@/lib/studio/constants";
 import { formatBpm, formatGenre, formatKey } from "@/lib/studio/format";
 import type { StudioTrack } from "@/lib/studio/types";
+import { CrateAddButton } from "./CrateAddButton";
 import { IconPause, IconPlay } from "./icons";
 
 type Props = {
@@ -14,7 +15,6 @@ type Props = {
   score?: number | null;
   onSelect: (event: React.MouseEvent | React.KeyboardEvent) => void;
   onPlay: () => void;
-  onAdd: () => void;
   onOpen: () => void;
 };
 
@@ -42,7 +42,6 @@ export function TrackRow({
   density = "compact",
   onSelect,
   onPlay,
-  onAdd,
   onOpen,
 }: Props) {
   const pending = track.analysisStatus === "pending";
@@ -72,7 +71,7 @@ export function TrackRow({
           onSelect(event);
         }
       }}
-      className="grid h-[var(--track-row-height)] grid-cols-[28px_minmax(0,1fr)_56px_44px] items-center gap-3 overflow-hidden border-b border-[#14171C] px-4 text-left min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_64px] min-[900px]:gap-2.5"
+      className="grid h-[var(--track-row-height)] grid-cols-[28px_minmax(0,1fr)_56px_44px_32px] items-center gap-3 overflow-hidden border-b border-[#14171C] px-4 text-left min-[900px]:grid-cols-[28px_minmax(0,1.5fr)_minmax(0,1fr)_52px_40px_minmax(5.75rem,0.95fr)_minmax(4.75rem,0.7fr)_32px] min-[900px]:gap-2.5"
       style={{
         background: selected || focused ? "#111318" : "transparent",
         ["--track-row-height" as string]: `${height}px`,
@@ -115,10 +114,8 @@ export function TrackRow({
           {status ?? vibe}
         </span>
       </div>
-      <div className="hidden text-right text-[11.5px] text-[#98A0AE] min-[900px]:block" onClick={(e) => e.stopPropagation()}>
-        <button type="button" aria-label={`Add ${track.title} to crate`} onClick={onAdd}>
-          + Crate
-        </button>
+      <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+        <CrateAddButton track={track} />
       </div>
     </div>
   );
