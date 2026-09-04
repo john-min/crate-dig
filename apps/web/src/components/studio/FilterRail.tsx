@@ -190,7 +190,9 @@ export function FilterRail({
           type="button"
           aria-label="New crate"
           className="bg-transparent text-[14px] text-[#98A0AE]"
-          onClick={s.createCrate}
+          onClick={() => {
+            s.createCrate();
+          }}
         >
           +
         </button>
